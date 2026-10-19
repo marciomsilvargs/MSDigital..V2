@@ -1,0 +1,239 @@
+{
+  "theme": "dark",
+  "project_name": "MS STUDIO SOCIAL V2",
+  "archetype": "ARCHETYPE 5: LUXURY & COMMAND CENTER",
+  "language": "pt-BR",
+  "typography": {
+    "font_family_heading": "Plus Jakarta Sans, sans-serif",
+    "font_family_sans": "Plus Jakarta Sans, sans-serif",
+    "font_family_mono": "JetBrains Mono, monospace",
+    "font_import": "@import \"@fontsource-variable/plus-jakarta-sans\";\n@import \"@fontsource-variable/jetbrains-mono\";",
+    "scale_px": {
+      "display": 56,
+      "h1": 40,
+      "h2": 32,
+      "h3": 24,
+      "h4": 20,
+      "body": 16,
+      "caption": 14
+    },
+    "typesetting": {
+      "headings": "tracking-tight font-bold text-slate-100",
+      "overlines": "uppercase text-xs font-semibold tracking-widest text-[#C5A46D]",
+      "body": "leading-relaxed text-slate-300 font-normal",
+      "metrics": "font-mono font-bold tracking-tight text-slate-100"
+    }
+  },
+  "colors": {
+    "brand": {
+      "primary_gold": "#C5A46D",
+      "gold_hover": "#D8B77E",
+      "gold_active": "#B18F58",
+      "gold_subtle": "#2A241A",
+      "bg_dark": "#10131B",
+      "bg_card": "#181C26",
+      "bg_elevated": "#202534",
+      "border_dark": "#282E40",
+      "border_gold_subtle": "rgba(197, 164, 109, 0.25)"
+    },
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#10131B",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "link": "#C5A46D",
+          "error": "#F87171",
+          "success": "#4ADE80",
+          "warning": "#FBBF24"
+        }
+      },
+      {
+        "name": "sidebar",
+        "kind": "solid",
+        "bg": "#0D1017",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "active_item": "#C5A46D",
+          "active_bg": "#1F1A12",
+          "border": "#1E2433"
+        }
+      },
+      {
+        "name": "card",
+        "kind": "solid",
+        "bg": "#181C26",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "accent_border": "#C5A46D",
+          "metric_val": "#FFFFFF",
+          "badge_bg": "#222838"
+        }
+      },
+      {
+        "name": "elevated_modal",
+        "kind": "solid",
+        "bg": "#1E2330",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "border": "#2E364D"
+        }
+      },
+      {
+        "name": "gold_badge",
+        "kind": "solid",
+        "bg": "#2A2317",
+        "on_bg": "#E9D2A8",
+        "on_bg_muted": "#C5A46D"
+      },
+      {
+        "name": "demo_badge",
+        "kind": "solid",
+        "bg": "#222538",
+        "on_bg": "#A5B4FC",
+        "on_bg_muted": "#818CF8"
+      },
+      {
+        "name": "real_badge",
+        "kind": "solid",
+        "bg": "#142A20",
+        "on_bg": "#86EFAC",
+        "on_bg_muted": "#4ADE80"
+      },
+      {
+        "name": "header_glass",
+        "kind": "glass",
+        "contrast_against": "#10131B",
+        "guarantee": "backdrop-blur-xl bg-[#10131B]/85 border-b border-[#282E40]",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8"
+      }
+    ],
+    "accent": "#C5A46D",
+    "on_accent": "#10131B"
+  },
+  "entry_surfaces": {
+    "/": "split agency login screen with luxury brand positioning panel on the left and login form on the right",
+    "/login": "split agency login screen with luxury brand positioning panel on the left and login form on the right",
+    "/dashboard": "dark SaaS dashboard shell with fixed glass topnav, sticky dark sidebar, global multi-company selector and metrics bento grid",
+    "/connection": "Instagram Meta OAuth connection diagnostic center with 8-state connection statuses and interactive modal triggers",
+    "/stories": "Instagram Story Studio with 9:16 mobile canvas simulator, weekly/monthly scheduling calendar and media drafts gallery",
+    "/inbox": "unified Direct Messages CRM with split 3-column inbox, internal notes, tags, status and quick-reply triggers",
+    "/comments": "Instagram comments moderation center with filter pills, sentiment tags, auto-reply rules and live response drawer",
+    "/automations": "visual React Flow drag-and-drop workflow canvas with triggers, conditions and action node nodes",
+    "/reports": "client reporting suite with interactive Recharts graphs, export options and real vs demo data badges",
+    "/companies": "multi-company management portal with company creation drawer, segment filtering and employee assignees"
+  },
+  "spacing_and_layout": {
+    "grid_modes": {
+      "dashboard_bento": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6",
+      "story_studio": "grid grid-cols-1 lg:grid-cols-12 gap-6",
+      "inbox_split": "grid grid-cols-1 md:grid-cols-12 gap-0 border border-[#282E40] rounded-xl overflow-hidden bg-[#181C26]",
+      "automation_canvas": "h-[calc(100vh-140px)] w-full rounded-xl border border-[#282E40] overflow-hidden"
+    },
+    "header_height": "h-16",
+    "sidebar_width": "w-64",
+    "border_radius": "rounded-xl for cards, rounded-lg for inputs/buttons, rounded-full for badges/pills"
+  },
+  "motion": {
+    "page_transitions": "initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}",
+    "card_hover": "transition-all duration-200 hover:-translate-y-0.5 hover:border-[#C5A46D]/40 hover:shadow-lg hover:shadow-black/40",
+    "button_press": "active:scale-95 transition-transform duration-100",
+    "dropdown_animation": "animate-in fade-in-0 zoom-in-95 duration-150"
+  },
+  "accessibility": {
+    "min_contrast_ratio": "4.5:1 for all text vs surface bg",
+    "focus_states": "focus-visible:ring-2 focus-visible:ring-[#C5A46D] focus-visible:ring-offset-2 focus-visible:ring-offset-[#10131B] outline-none",
+    "data_testid_required": true,
+    "aria_compliance": "aria-label on all icon-only buttons, role='dialog' on modals, proper heading hierarchy"
+  },
+  "connection_states_specification": [
+    {
+      "state": "not_connected",
+      "label": "Não conectado",
+      "badge_color": "bg-slate-800 text-slate-300 border-slate-700",
+      "action": "Conectar Instagram"
+    },
+    {
+      "state": "awaiting_auth",
+      "label": "Aguardando autorização",
+      "badge_color": "bg-amber-950/60 text-amber-300 border-amber-800",
+      "action": "Continuar no Meta"
+    },
+    {
+      "state": "connecting",
+      "label": "Conectando...",
+      "badge_color": "bg-blue-950/60 text-blue-300 border-blue-800 animate-pulse",
+      "action": "Aguarde"
+    },
+    {
+      "state": "connected",
+      "label": "Conectado",
+      "badge_color": "bg-emerald-950/60 text-emerald-300 border-emerald-800",
+      "action": "Sincronizar"
+    },
+    {
+      "state": "partially_connected",
+      "label": "Conectado parcialmente",
+      "badge_color": "bg-yellow-950/60 text-yellow-300 border-yellow-800",
+      "action": "Concluir Permissões"
+    },
+    {
+      "state": "insufficient_permissions",
+      "label": "Permissões insuficientes",
+      "badge_color": "bg-orange-950/60 text-orange-300 border-orange-800",
+      "action": "Revisar Permissões"
+    },
+    {
+      "state": "session_expired",
+      "label": "Sessão expirada",
+      "badge_color": "bg-rose-950/60 text-rose-300 border-rose-800",
+      "action": "Reconectar Conta"
+    },
+    {
+      "state": "connection_error",
+      "label": "Erro de conexão",
+      "badge_color": "bg-red-950/60 text-red-300 border-red-800",
+      "action": "Diagnosticar e Tentar Novamente"
+    }
+  ],
+  "image_urls": [
+    {
+      "category": "agency_team",
+      "url": "https://images.unsplash.com/photo-1522071820081-009f0129c71c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBvZmZpY2UlMjBtYXJrZXRpbmclMjBhZ2VuY3klMjB0ZWFtd29ya3xlbnwwfHx8fDE3OTI0MzMwMzd8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Equipe de marketing da agência colaborando com laptops em ambiente moderno",
+      "used_in": "Login Screen Side Panel & Agency Profile"
+    },
+    {
+      "category": "agency_presentation",
+      "url": "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBvZmZpY2UlMjBtYXJrZXRpbmclMjBhZ2VuY3klMjB0ZWFtd29ya3xlbnwwfHx8fDE3OTI0MzMwMzd8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Reunião executiva e planejamento de estratégias de redes sociais",
+      "used_in": "Company Overview Header"
+    }
+  ],
+  "instructions_to_main_agent": [
+    "Implement the global company selector in the top navbar that updates all screens instantaneously (State Context or URL query/store).",
+    "Strictly honor the dark gold theme: Background #10131B, Card #181C26, Accent #C5A46D, Text Primary #F8FAFC, Text Muted #94A3B8.",
+    "Implement the 8 Instagram connection states with visual indicators and diagnostic tools, and provide mock toggle buttons for easy testing of each state.",
+    "When a company is disconnected, show a polite lock banner: 'Conecte o Instagram desta empresa para habilitar as funcionalidades.' with a prominent [Conectar agora] button.",
+    "Always differentiate real vs demonstrative data using explicit badges (e.g. 'DADOS REAIS' in green pill or 'DEMONSTRAÇÃO' in purple/indigo pill).",
+    "Story Studio: 9:16 mobile mockup with live story preview, weekly/monthly calendar switcher, scheduling modal with date/time pickers and retry status badges.",
+    "Direct CRM: Unified 3-column inbox (Conversations list, Active Chat with internal notes and quick replies, and Contact details with tags/assigned agent).",
+    "Comments Center: Sentiment filter, keyword search, quick canned responses, and manual reply modal.",
+    "Automation Builder: Visual interactive node builder (React Flow or customized visual node graph) with triggers (Mensagem, Comentário, Palavra-chave), conditions (Horário comercial, Tag) and actions (Responder, Aplicar Tag, Atribuir).",
+    "Reports: Recharts visualizations showing published stories, received comments/DMs, response times, and automated conversions.",
+    "Ensure every interactive element and data card has a data-testid attribute in kebab-case."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Never use generic centered layouts or unstyled default components.",
+    "Provide micro-interactions on all hover states and clicks.",
+    "Ensure generous padding inside cards (p-5 or p-6) to avoid text collision.",
+    "Use Sonner for toasts on successful actions (e.g., 'História agendada com sucesso!', 'Automação ativada!').",
+    "Ensure all copy is in Brazilian Portuguese (pt-BR)."
+  ]
+}
