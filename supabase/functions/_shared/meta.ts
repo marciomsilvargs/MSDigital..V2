@@ -6,7 +6,7 @@ export const IG_SCOPES = [
 ];
 export const FB_SCOPES = [
   "instagram_basic", "instagram_content_publish", "instagram_manage_comments",
-  "instagram_manage_messages", "pages_show_list", "pages_read_engagement", "pages_manage_metadata",
+  "instagram_manage_messages", "pages_show_list", "pages_read_engagement",
 ];
 
 export function apiVersion(flow: string): string {
