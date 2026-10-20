@@ -1,4 +1,4 @@
-import { failConnection, realConnection } from "../_shared/connections.ts";
+import { realConnection, subscribeInstagram } from "../_shared/connections.ts";
 import { graphBase, graphRequest, FB_SCOPES, IG_SCOPES } from "../_shared/meta.ts";
 import { handleError, json, preflight, requireMember } from "../_shared/http.ts";
 
@@ -13,10 +13,20 @@ Deno.serve(async (req) => {
     authorizedCompanyId = companyId;
     const conn = await realConnection(admin, companyId);
     const profile = await graphRequest(`${graphBase(conn.login_flow)}/${encodeURIComponent(conn.ig_user_id)}?fields=id,username,name,account_type,profile_picture_url`, conn.token);
+    const requiredScopes = conn.login_flow === "facebook_login" ? FB_SCOPES : IG_SCOPES;
+    const missingScopes = requiredScopes.filter((scope) => !(conn.granted_scopes || []).includes(scope));
+    // The app-level webhook destination is configured in Meta. This call enrolls
+    // the connected Instagram account so it can receive comments and Directs.
+    const instagramHooks = await subscribeInstagram(conn.ig_user_id, conn.token, conn.login_flow);
     const updated = {
       username: profile.username || conn.username,
       profile_pic: profile.profile_picture_url || conn.profile_pic,
-      last_synced_at: new Date().toISOString(), last_error: null, error_hint: null, updated_at: new Date().toISOString(),
+      state: missingScopes.length ? "partially_connected" : "connected",
+      webhooks: { ...(conn.webhooks || {}), comments: instagramHooks, messages: instagramHooks },
+      last_synced_at: new Date().toISOString(),
+      last_error: missingScopes.length ? `Permissões ausentes: ${missingScopes.join(", ")}` : null,
+      error_hint: missingScopes.length ? "Conclua a autorização concedendo todas as permissões solicitadas." : null,
+      updated_at: new Date().toISOString(),
     };
     const { data, error } = await admin.from("connections").update(updated).eq("company_id", companyId).select("*").single();
     if (error) throw error;

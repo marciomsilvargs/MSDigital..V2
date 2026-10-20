@@ -71,6 +71,50 @@ async function withSignedMedia<T extends Row>(rows: T[], pathKey = "storage_path
     return { ...row, url: data.signedUrl };
   }));
 }
+
+/**
+ * Instagram overlays the account header, reply field, and action buttons above a
+ * Story. Convert regular image uploads to a 1080×1920 composition with a safe
+ * foreground area so text placed near the edges is not hidden by those controls.
+ */
+async function prepareStoryImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/") || file.type === "image/gif" || file.type === "image/svg+xml") return file;
+  try {
+    const image = await createImageBitmap(file);
+    const width = 1080;
+    const height = 1920;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+
+    // A blurred cover image keeps the frame visually full while the source is
+    // reduced into the Instagram safe area (top 250px / bottom 270px).
+    const backgroundScale = Math.max(width / image.width, height / image.height);
+    const backgroundWidth = image.width * backgroundScale;
+    const backgroundHeight = image.height * backgroundScale;
+    context.filter = "blur(28px) brightness(0.48)";
+    context.drawImage(image, (width - backgroundWidth) / 2, (height - backgroundHeight) / 2, backgroundWidth, backgroundHeight);
+    context.filter = "none";
+
+    const safeLeft = 54;
+    const safeTop = 250;
+    const safeWidth = width - safeLeft * 2;
+    const safeHeight = height - safeTop - 270;
+    const foregroundScale = Math.min(safeWidth / image.width, safeHeight / image.height);
+    const foregroundWidth = image.width * foregroundScale;
+    const foregroundHeight = image.height * foregroundScale;
+    context.drawImage(image, (width - foregroundWidth) / 2, safeTop + (safeHeight - foregroundHeight) / 2, foregroundWidth, foregroundHeight);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (!blob) return file;
+    const safeName = file.name.replace(/\.[^.]+$/, "") || "story";
+    return new File([blob], `${safeName}-story.jpg`, { type: "image/jpeg", lastModified: Date.now() });
+  } catch {
+    return file;
+  }
+}
 async function updateRow<T>(table: string, rowId: string, values: Body, companyId?: string): Promise<T> {
   let query = db().from(table).update(values).eq("id", rowId);
   if (companyId) query = query.eq("company_id", companyId);
@@ -378,14 +422,15 @@ export const apiPostForm = async <T>(path: string, form: FormData): Promise<T> =
   const match = path.match(/^\/companies\/([^/]+)\/media\/upload$/);
   if (!match) throw new ApiError(404, `Rota não mapeada para Supabase: POST ${path}`);
   const companyId = decodeURIComponent(match[1]);
-  const file = form.get("file");
-  if (!(file instanceof File)) throw new ApiError(400, "Selecione um arquivo de mídia.");
-  if (file.size > 3_000_000) throw new ApiError(413, "Arquivo maior que 3 MB.");
+  const sourceFile = form.get("file");
+  if (!(sourceFile instanceof File)) throw new ApiError(400, "Selecione um arquivo de mídia.");
+  const file = await prepareStoryImage(sourceFile);
+  if (file.size > 3_000_000) throw new ApiError(413, "Arquivo maior que 3 MB mesmo após o ajuste para Story.");
   const client = db();
   const objectPath = `${companyId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   const { error: uploadError } = await client.storage.from("media").upload(objectPath, file, { contentType: file.type, upsert: false });
   if (uploadError) fail(uploadError);
   const { data: signed, error: signedError } = await client.storage.from("media").createSignedUrl(objectPath, 3600);
   if (signedError) fail(signedError);
-  return await insertRow("media", { company_id: companyId, media_type: file.type.startsWith("video/") ? "video" : "image", url: `storage://media/${objectPath}`, storage_path: objectPath, name: file.name }).then((row: any) => ({ ...row, url: signed.signedUrl })) as T;
+  return await insertRow("media", { company_id: companyId, media_type: file.type.startsWith("video/") ? "video" : "image", url: `storage://media/${objectPath}`, storage_path: objectPath, name: sourceFile.name }).then((row: any) => ({ ...row, url: signed.signedUrl })) as T;
 };
