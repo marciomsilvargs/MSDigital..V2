@@ -60,6 +60,12 @@ chainlit.md
 
 # Deployment
 .vercel
+.deploy/
+.codex/
+*-verification.png
+supabase/.temp/
+backend/
+tests/
 
 # Data and databases
 agenthub/agents/youtube/db
