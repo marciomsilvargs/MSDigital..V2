@@ -93,6 +93,8 @@ export interface Story {
   id: string;
   company_id: string;
   media_url: string;
+  /** Fresh signed URL returned for private Supabase Storage media. */
+  url?: string;
   media_type: "image" | "video";
   caption: string;
   schedule_at: string;
@@ -258,3 +260,4 @@ export interface ReportSummary {
   series: SeriesPoint[];
   sources: Record<string, number>;
 }
+
