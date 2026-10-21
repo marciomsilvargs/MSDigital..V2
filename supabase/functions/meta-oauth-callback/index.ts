@@ -50,7 +50,11 @@ Deno.serve(async (req) => {
       if (pages.length === 1) {
         const page = pages[0];
         const token = await (await import("../_shared/crypto.ts")).decryptToken(page.token_ciphertext);
-        const hooks = await subscribePage(page.page_id, token);
+        // The Page subscription alone does not enroll the linked Instagram
+        // account for Direct and comment events. Subscribe both resources.
+        const pageHooks = await subscribePage(page.page_id, token);
+        const instagramHooks = await subscribeInstagram(page.ig_user_id, token, "facebook_login");
+        const hooks = pageHooks || instagramHooks;
         const saved = await saveRealConnection(admin, {
           companyId: oauth.company_id, flow: "facebook_login", igId: page.ig_user_id,
           username: page.username, profilePic: page.profile_pic, accountType: "BUSINESS",
@@ -84,3 +88,4 @@ Deno.serve(async (req) => {
     return redirect({ connect: "connection_error" });
   }
 });
+
