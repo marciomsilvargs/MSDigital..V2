@@ -1,6 +1,6 @@
 import { handleError, json, preflight, requireMember } from "../_shared/http.ts";
 import { decryptToken } from "../_shared/crypto.ts";
-import { saveRealConnection, subscribePage } from "../_shared/connections.ts";
+import { saveRealConnection, subscribeInstagram, subscribePage } from "../_shared/connections.ts";
 import { FB_SCOPES } from "../_shared/meta.ts";
 
 Deno.serve(async (req) => {
@@ -19,7 +19,9 @@ Deno.serve(async (req) => {
     const page = (pending.pages || []).find((item: Record<string, string>) => item.page_id === pageId);
     if (!page) return json({ detail: "Página não pertence a esta autorização." }, 400);
     const token = await decryptToken(page.token_ciphertext);
-    const hooks = await subscribePage(page.page_id, token);
+    const pageHooks = await subscribePage(page.page_id, token);
+    const instagramHooks = await subscribeInstagram(page.ig_user_id, token, "facebook_login");
+    const hooks = pageHooks || instagramHooks;
     const connection = await saveRealConnection(admin, {
       companyId, flow: "facebook_login", igId: page.ig_user_id, username: page.username,
       profilePic: page.profile_pic, accountType: "BUSINESS", scopes: pending.granted_scopes || FB_SCOPES,
@@ -30,3 +32,4 @@ Deno.serve(async (req) => {
     return json({ demo_mode: false, connection, required_scopes: FB_SCOPES, instagram_login_available: !!Deno.env.get("INSTAGRAM_APP_ID"), facebook_login_available: true });
   } catch (error) { return handleError(error); }
 });
+
