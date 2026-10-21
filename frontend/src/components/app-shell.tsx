@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MessageSquare,
   Plus,
+  Sparkles,
   Workflow,
 } from "lucide-react";
 import { getCurrentUser } from "@/lib/supabase";
@@ -41,6 +42,7 @@ const NAV = [
   { to: "/inbox", label: "Direct", icon: MessageCircle, testid: "nav-inbox" },
   { to: "/comments", label: "Comentários", icon: MessageSquare, testid: "nav-comments" },
   { to: "/automations", label: "Automações", icon: Workflow, testid: "nav-automations" },
+  { to: "/assistant", label: "Assistente IA", icon: Sparkles, testid: "nav-assistant" },
   { to: "/reports", label: "Relatórios", icon: BarChart3, testid: "nav-reports" },
 ];
 
@@ -244,3 +246,4 @@ export default function AppShell() {
     </CompanyProvider>
   );
 }
+
