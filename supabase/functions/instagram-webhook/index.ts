@@ -1,5 +1,6 @@
 import { clients, json } from "../_shared/http.ts";
 import { runAutomations } from "../_shared/automation.ts";
+import { runAiAssistant } from "../_shared/ai.ts";
 
 function equalBytes(left: Uint8Array, right: Uint8Array) {
   if (left.length !== right.length) return false;
@@ -90,7 +91,11 @@ Deno.serve(async (req) => {
         const sender = String(event.sender?.id || "");
         if (!text || !sender || sender === String(account.ig_user_id)) continue;
         const saved = await saveInboundMessage(admin, companyId, String(entry.id), sender, text, String(event.message?.mid || ""));
-        if (saved) await runAutomations(admin, companyId, "message_received", text, { conversationId: saved.conversationId }, "real");
+        if (saved) {
+          await runAutomations(admin, companyId, "message_received", text, { conversationId: saved.conversationId }, "real");
+          try { await runAiAssistant(admin, companyId, "message", text, saved.conversationId); }
+          catch (error) { console.error("AI assistant message reply failed", error); }
+        }
       }
       for (const change of entry.changes || []) {
         if (change.field !== "comments" && !(change.field === "feed" && change.value?.item === "comment")) continue;
@@ -108,6 +113,8 @@ Deno.serve(async (req) => {
         if (error?.code === "23505") continue;
         if (error) throw error;
         await runAutomations(admin, companyId, "comment_received", text, { commentId: comment.id }, "real");
+        try { await runAiAssistant(admin, companyId, "comment", text, comment.id); }
+        catch (error) { console.error("AI assistant comment reply failed", error); }
       }
     }
     return json({ ok: true });
@@ -118,3 +125,4 @@ Deno.serve(async (req) => {
     return json({ detail: "Falha processando o webhook." }, 500);
   }
 });
+
