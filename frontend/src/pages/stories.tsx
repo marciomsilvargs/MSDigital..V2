@@ -93,6 +93,7 @@ export default function Stories() {
   const [view, setView] = useState("week");
   const [selectedDay, setSelectedDay] = useState(new Date());
   const [previewStory, setPreviewStory] = useState<Story | null>(null);
+  const [previewFit, setPreviewFit] = useState<"cover" | "contain">("contain");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const connection = connStatus?.connection ?? null;
@@ -284,9 +285,9 @@ export default function Stories() {
             <div className="relative aspect-[9/16] w-full max-w-[240px] overflow-hidden rounded-2xl border-4 border-[#282E40] bg-[#0D1017]" data-testid="story-preview-frame">
               {activeMedia ? (
                 activeMedia.media_type === "image" ? (
-                  <img src={activeMedia.url} alt="Pré-visualização do story" className="h-full w-full object-cover" />
+                  <img src={activeMedia.url} alt="Pré-visualização do story" className={cn("h-full w-full", previewFit === "cover" ? "object-cover" : "object-contain")} />
                 ) : (
-                  <video src={activeMedia.url} className="h-full w-full object-cover" muted autoPlay loop />
+                  <video src={activeMedia.url} className={cn("h-full w-full", previewFit === "cover" ? "object-cover" : "object-contain")} muted autoPlay loop controls playsInline preload="metadata" />
                 )
               ) : (
                 <div className="flex h-full items-center justify-center text-[#94A3B8]">
@@ -303,7 +304,12 @@ export default function Stories() {
                 <span className="h-1.5 flex-1 rounded-full bg-white/30" />
               </span>
             </div>
-            <p className="mt-3 text-xs text-[#94A3B8]">Pré-visualização 9:16</p>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-[#94A3B8]">Ajuste:</span>
+              <Button type="button" size="sm" variant={previewFit === "contain" ? "secondary" : "ghost"} onClick={() => setPreviewFit("contain")} data-testid="story-fit-contain" className="h-7 px-2 text-xs">Conter</Button>
+              <Button type="button" size="sm" variant={previewFit === "cover" ? "secondary" : "ghost"} onClick={() => setPreviewFit("cover")} data-testid="story-fit-cover" className="h-7 px-2 text-xs">Preencher</Button>
+            </div>
+            <p className="mt-1 text-xs text-[#94A3B8]">Pré-visualização 9:16 · a mídia mantém a proporção original</p>
           </div>
         </div>
 
