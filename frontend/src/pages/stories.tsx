@@ -133,6 +133,16 @@ export default function Stories() {
     onError: errorToast,
   });
 
+  const deleteMediaMutation = useMutation({
+    mutationFn: (id: string) => apiDelete<MediaItem>(`/companies/${companyId}/media/${id}`),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: companyKey(companyId, "media") });
+      setSelectedMedia((selected) => selected?.id === id ? null : selected);
+      toast.success("Mídia removida da biblioteca.");
+    },
+    onError: errorToast,
+  });
+
   const scheduleMutation = useMutation({
     mutationFn: (asDraft: boolean) =>
       apiPost<Story>(`/companies/${companyId}/stories`, {
@@ -232,22 +242,34 @@ export default function Stories() {
           </div>
           <div className="grid grid-cols-3 gap-2 px-5 pb-5">
             {media.map((item) => (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                data-testid={`media-item-${item.id}`}
-                onClick={() => setSelectedMedia(item)}
                 className={cn(
-                  "relative aspect-[9/16] overflow-hidden rounded-lg border-2 transition-colors",
+                  "group relative aspect-[9/16] overflow-hidden rounded-lg border-2 transition-colors",
                   activeMedia?.id === item.id ? "border-[#C5A46D]" : "border-transparent hover:border-[#C5A46D]/40"
                 )}
               >
-                {item.media_type === "image" ? (
-                  <img src={item.url} alt={item.name} className="h-full w-full object-cover" />
-                ) : (
-                  <video src={item.url} className="h-full w-full object-cover" muted />
-                )}
-              </button>
+                <button type="button" data-testid={`media-item-${item.id}`} onClick={() => setSelectedMedia(item)} aria-label={`Selecionar ${item.name}`} className="h-full w-full">
+                  {item.media_type === "image" ? (
+                    <img src={item.url} alt={item.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <video src={item.url} className="h-full w-full object-cover" muted />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  data-testid={`media-delete-${item.id}`}
+                  aria-label={`Excluir ${item.name} da biblioteca`}
+                  title="Excluir da biblioteca"
+                  disabled={deleteMediaMutation.isPending}
+                  onClick={() => {
+                    if (window.confirm(`Excluir “${item.name}” da biblioteca? Stories já agendados continuarão usando esta mídia.`)) deleteMediaMutation.mutate(item.id);
+                  }}
+                  className="absolute right-1 top-1 rounded-md bg-black/75 p-1.5 text-white opacity-0 transition-opacity hover:bg-red-700 focus:opacity-100 group-hover:opacity-100 disabled:opacity-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             ))}
             {media.length === 0 && (
               <p className="col-span-3 py-8 text-center text-sm text-[#94A3B8]">Nenhuma mídia na biblioteca.</p>
@@ -454,11 +476,11 @@ export default function Stories() {
                       </Button>
                     )}
                     {["draft", "scheduled"].includes(story.status) && (
-                      <Button size="sm" variant="outline" data-testid={`story-cancel-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "cancel" })} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Cancelar">
+                      <Button size="sm" variant="outline" data-testid={`story-cancel-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "cancel" })} disabled={storyAction.isPending} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Cancelar agendamento" title="Cancelar agendamento">
                         <XCircle className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" data-testid={`story-delete-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "delete" })} className="border-[#282E40] text-[#F87171] hover:bg-[#221318]" aria-label="Excluir">
+                    <Button size="sm" variant="outline" data-testid={`story-delete-${story.id}`} onClick={() => { if (window.confirm("Excluir este agendamento/story permanentemente?")) storyAction.mutate({ id: story.id, action: "delete" }); }} disabled={storyAction.isPending} className="border-[#282E40] text-[#F87171] hover:bg-[#221318]" aria-label="Excluir story" title="Excluir story">
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -496,3 +518,4 @@ export default function Stories() {
     </div>
   );
 }
+

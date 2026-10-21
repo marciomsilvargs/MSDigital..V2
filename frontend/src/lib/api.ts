@@ -207,6 +207,20 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
     const media_type = payload.media_type || (/\.(mp4|mov|webm)(\?|$)/i.test(url) ? "video" : "image");
     return await insertRow("media", { company_id: companyId, url, media_type, name: payload.name || "mídia externa" }) as T;
   }
+  if (parts[2] === "media" && parts[3] && method === "DELETE") {
+    const mediaId = parts[3];
+    const item = await result<Row | null>(db().from("media").select("id,storage_path").eq("id", mediaId).eq("company_id", companyId).maybeSingle());
+    if (!item) throw new ApiError(404, "Mídia não encontrada nesta empresa.");
+    const deleted = await result<Row[]>(db().from("media").delete().eq("id", mediaId).eq("company_id", companyId).select("id"));
+    if (item.storage_path) {
+      const referenced = await result<Row[]>(db().from("stories").select("id").eq("company_id", companyId).eq("media_storage_path", item.storage_path).limit(1));
+      if (!referenced.length) {
+        const { error } = await db().storage.from("media").remove([item.storage_path]);
+        if (error) fail(error);
+      }
+    }
+    return (deleted[0] ?? undefined) as T;
+  }
   if (parts[2] === "stories" && parts.length === 3 && method === "GET") {
     let q = db().from("stories").select("*").eq("company_id", companyId).order("schedule_at");
     if (query.get("status")) q = q.eq("status", query.get("status"));
@@ -434,3 +448,4 @@ export const apiPostForm = async <T>(path: string, form: FormData): Promise<T> =
   if (signedError) fail(signedError);
   return await insertRow("media", { company_id: companyId, media_type: file.type.startsWith("video/") ? "video" : "image", url: `storage://media/${objectPath}`, storage_path: objectPath, name: sourceFile.name }).then((row: any) => ({ ...row, url: signed.signedUrl })) as T;
 };
+
