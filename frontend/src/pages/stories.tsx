@@ -476,8 +476,9 @@ export default function Stories() {
                       </Button>
                     )}
                     {["draft", "scheduled"].includes(story.status) && (
-                      <Button size="sm" variant="outline" data-testid={`story-cancel-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "cancel" })} disabled={storyAction.isPending} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Cancelar agendamento" title="Cancelar agendamento">
-                        <XCircle className="h-3.5 w-3.5" />
+                      <Button size="sm" variant="outline" data-testid={`story-cancel-${story.id}`} onClick={() => { if (window.confirm("Cancelar este agendamento?")) storyAction.mutate({ id: story.id, action: "cancel" }); }} disabled={storyAction.isPending} className="border-[#6B5360] text-[#FBBF24] hover:bg-[#2A2024]" aria-label="Cancelar agendamento" title="Cancelar agendamento">
+                        <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                        Cancelar
                       </Button>
                     )}
                     <Button size="sm" variant="outline" data-testid={`story-delete-${story.id}`} onClick={() => { if (window.confirm("Excluir este agendamento/story permanentemente?")) storyAction.mutate({ id: story.id, action: "delete" }); }} disabled={storyAction.isPending} className="border-[#282E40] text-[#F87171] hover:bg-[#221318]" aria-label="Excluir story" title="Excluir story">
