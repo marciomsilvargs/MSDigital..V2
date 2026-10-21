@@ -11,6 +11,7 @@ import Inbox from "@/pages/inbox";
 import Comments from "@/pages/comments";
 import Automations from "@/pages/automations";
 import Reports from "@/pages/reports";
+import Assistant from "@/pages/assistant";
 
 // One <Route> per page in src/pages; BrowserRouter already wraps this in main.tsx.
 export default function App() {
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/inbox" element={<Inbox />} />
         <Route path="/comments" element={<Comments />} />
         <Route path="/automations" element={<Automations />} />
+        <Route path="/assistant" element={<Assistant />} />
         <Route path="/reports" element={<Reports />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
@@ -41,3 +43,4 @@ export default function App() {
     </>
   );
 }
+
