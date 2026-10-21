@@ -92,6 +92,7 @@ export default function Stories() {
   const [mediaUrl, setMediaUrl] = useState("");
   const [view, setView] = useState("week");
   const [selectedDay, setSelectedDay] = useState(new Date());
+  const [previewStory, setPreviewStory] = useState<Story | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const connection = connStatus?.connection ?? null;
@@ -434,13 +435,14 @@ export default function Stories() {
             <div className="space-y-3">
               {[...stories].reverse().map((story) => (
                 <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-3 rounded-xl border border-[#282E40] bg-[#10131B] p-4 sm:flex-row sm:items-center">
-                  <div className="h-16 w-9 shrink-0 overflow-hidden rounded bg-[#202534]">
+                  <button type="button" onClick={() => setPreviewStory(story)} className="relative h-16 w-9 shrink-0 overflow-hidden rounded bg-[#202534]" aria-label="Abrir pré-visualização do story">
                     {story.media_type === "image" ? (
                       <img src={story.url ?? story.media_url} alt="Story agendado" className="h-full w-full object-cover" />
                     ) : (
-                      <video src={story.url ?? story.media_url} className="h-full w-full object-cover" controls playsInline preload="metadata" aria-label="Reproduzir vídeo do story" />
+                      <video src={story.url ?? story.media_url} className="h-full w-full object-cover" muted playsInline preload="metadata" onContextMenu={(event) => event.preventDefault()} />
                     )}
-                  </div>
+                    {story.media_type === "video" && <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white"><Play className="h-4 w-4 fill-current" /></span>}
+                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={story.status} testid={`story-status-${story.id}`} />
@@ -492,6 +494,26 @@ export default function Stories() {
           </TabsContent>
         </Tabs>
       </Card>
+
+      <Dialog open={!!previewStory} onOpenChange={(open) => !open && setPreviewStory(null)}>
+        <DialogContent className="max-w-md border-[#2E364D] bg-[#1E2330]" data-testid="story-preview-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-[#F8FAFC]">Pré-visualização do Story</DialogTitle>
+            <DialogDescription className="text-[#94A3B8]">
+              {previewStory?.caption || "Sem legenda"}
+            </DialogDescription>
+          </DialogHeader>
+          {previewStory && (
+            <div className="mx-auto w-full max-w-[280px] overflow-hidden rounded-xl bg-black">
+              {previewStory.media_type === "image" ? (
+                <img src={previewStory.url ?? previewStory.media_url} alt="Pré-visualização do Story" className="max-h-[65vh] w-full object-contain" />
+              ) : (
+                <video src={previewStory.url ?? previewStory.media_url} className="max-h-[65vh] w-full" controls autoPlay playsInline preload="metadata" />
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={urlDialogOpen} onOpenChange={setUrlDialogOpen}>
         <DialogContent role="dialog" className="border-[#2E364D] bg-[#1E2330]" data-testid="media-url-dialog">
