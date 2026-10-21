@@ -42,6 +42,19 @@ async function companyView(companyId: string): Promise<Row> {
 async function connectionStatus(companyId: string): Promise<Row> {
   return await edge<Row>("meta-connect-status", { company_id: companyId });
 }
+async function ensureAiWorkspace(companyId: string): Promise<{ assistant: Row; base: Row; version: Row }> {
+  const client = db();
+  let base = await result<Row | null>(client.from("knowledge_bases").select("*").eq("company_id", companyId).maybeSingle());
+  if (!base) base = await insertRow<Row>("knowledge_bases", { company_id: companyId, name: "Base principal", description: "" });
+  let version = await result<Row | null>(client.from("knowledge_versions").select("*").eq("knowledge_base_id", base.id).eq("status", "draft").order("version_number", { ascending: false }).limit(1).maybeSingle());
+  if (!version) {
+    const latest = await result<Row | null>(client.from("knowledge_versions").select("version_number").eq("knowledge_base_id", base.id).order("version_number", { ascending: false }).limit(1).maybeSingle());
+    version = await insertRow<Row>("knowledge_versions", { company_id: companyId, knowledge_base_id: base.id, version_number: Number(latest?.version_number || 0) + 1, status: "draft" });
+  }
+  let assistant = await result<Row | null>(client.from("ai_assistants").select("*").eq("company_id", companyId).maybeSingle());
+  if (!assistant) assistant = await insertRow<Row>("ai_assistants", { company_id: companyId, active_knowledge_version_id: null });
+  return { assistant, base, version };
+}
 async function upsertConnection(companyId: string, values: Body | null): Promise<Row> {
   if (values) await result(db().from("connections").upsert({ company_id: companyId, ...values, updated_at: now() }));
   return connectionStatus(companyId);
@@ -385,6 +398,49 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
   if (parts[2] === "automation-runs" && method === "GET") return await result<Row[]>(db().from("automation_runs").select("*").eq("company_id", companyId).order("created_at", { ascending: false })) as T;
   if (parts[2] === "tasks" && parts.length === 3 && method === "GET") return await result<Row[]>(db().from("tasks").select("*").eq("company_id", companyId).order("created_at", { ascending: false })) as T;
   if (parts[2] === "tasks" && parts[3] && method === "PATCH") return await updateRow("tasks", parts[3], payload, companyId) as T;
+
+  // Per-company AI assistant and versioned knowledge base.
+  if (parts[2] === "assistant") {
+    if (parts.length === 3 && method === "GET") {
+      const workspace = await ensureAiWorkspace(companyId);
+      const entries = await result<Row[]>(db().from("knowledge_entries").select("*").eq("company_id", companyId).eq("knowledge_version_id", workspace.version.id).order("created_at", { ascending: false }));
+      return { ...workspace, entries } as T;
+    }
+    if (parts.length === 3 && method === "PATCH") {
+      await ensureAiWorkspace(companyId);
+      const allowed = Object.fromEntries(
+        Object.entries(((
+          { name, personality, mode, enabled, human_handoff_enabled, handoff_message },
+        ) => ({ name, personality, mode, enabled, human_handoff_enabled, handoff_message }))(payload)).filter(([, value]) => value !== undefined),
+      );
+      return await updateRow<Row>("ai_assistants", (await result<Row>(db().from("ai_assistants").select("id").eq("company_id", companyId).single())).id, allowed, companyId) as T;
+    }
+    if (parts[3] === "entries" && parts.length === 4 && method === "GET") {
+      const workspace = await ensureAiWorkspace(companyId);
+      return await result<Row[]>(db().from("knowledge_entries").select("*").eq("company_id", companyId).eq("knowledge_version_id", workspace.version.id).order("created_at", { ascending: false })) as T;
+    }
+    if (parts[3] === "entries" && parts.length === 4 && method === "POST") {
+      const workspace = await ensureAiWorkspace(companyId);
+      const title = String(payload.title ?? "").trim();
+      if (!title) throw new ApiError(400, "Informe o título do conhecimento.");
+      return await insertRow<Row>("knowledge_entries", { company_id: companyId, knowledge_version_id: workspace.version.id, kind: String(payload.kind || "faq"), title, content: String(payload.content ?? "").trim(), metadata: payload.metadata ?? {}, active: payload.active !== false }) as T;
+    }
+    if (parts[3] === "entries" && parts[4]) {
+      const entryId = parts[4];
+      if (method === "PATCH") return await updateRow<Row>("knowledge_entries", entryId, payload, companyId) as T;
+      if (method === "DELETE") { await result(db().from("knowledge_entries").delete().eq("id", entryId).eq("company_id", companyId)); return undefined as T; }
+    }
+    if (parts[3] === "publish" && method === "POST") {
+      const workspace = await ensureAiWorkspace(companyId);
+      const auth = await db().auth.getUser();
+      const published = await updateRow<Row>("knowledge_versions", workspace.version.id, { status: "published", published_at: now(), published_by: auth.data.user?.id ?? null }, companyId);
+      await updateRow<Row>("ai_assistants", workspace.assistant.id, { active_knowledge_version_id: published.id }, companyId);
+      const next = await insertRow<Row>("knowledge_versions", { company_id: companyId, knowledge_base_id: workspace.base.id, version_number: Number(workspace.version.version_number) + 1, status: "draft" });
+      const entries = await result<Row[]>(db().from("knowledge_entries").select("kind,title,content,metadata,active").eq("company_id", companyId).eq("knowledge_version_id", published.id));
+      if (entries.length) await result(db().from("knowledge_entries").insert(entries.map((entry) => ({ ...entry, company_id: companyId, knowledge_version_id: next.id }))));
+      return { ...workspace, version: next, published } as T;
+    }
+  }
 
   if (parts[2] === "reports" && method === "GET") {
     const [stories, comments, messages, runs, conversations, reportConnection] = await Promise.all([
