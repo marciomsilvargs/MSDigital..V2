@@ -234,6 +234,56 @@ export interface Task {
   created_at: string;
 }
 
+export type AssistantMode = "automatic" | "supervised" | "assisted";
+export type KnowledgeEntryKind = "institutional" | "hours" | "service" | "course" | "event" | "price" | "promotion" | "faq" | "document";
+
+export interface AiAssistant {
+  id: string;
+  company_id: string;
+  name: string;
+  personality: string;
+  mode: AssistantMode;
+  enabled: boolean;
+  human_handoff_enabled: boolean;
+  handoff_message: string;
+  active_knowledge_version_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeBase {
+  id: string;
+  company_id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeVersion {
+  id: string;
+  company_id: string;
+  knowledge_base_id: string;
+  version_number: number;
+  status: "draft" | "published" | "archived";
+  published_at: string | null;
+  published_by: string | null;
+  created_at: string;
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  company_id: string;
+  knowledge_version_id: string;
+  kind: KnowledgeEntryKind;
+  title: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ReportTotals {
   stories_published: number;
   stories_scheduled: number;
