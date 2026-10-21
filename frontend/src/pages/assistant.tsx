@@ -28,7 +28,7 @@ export default function Assistant() {
   const [form, setForm] = useState<Partial<AiAssistant>>({});
   const [newEntry, setNewEntry] = useState({ kind: "faq" as KnowledgeEntryKind, title: "", content: "" });
 
-  const { data: workspace, isLoading } = useQuery({
+  const { data: workspace, isLoading, error } = useQuery({
     queryKey: companyKey(companyId, "assistant"),
     queryFn: () => apiGet<Workspace>(`/companies/${companyId}/assistant`),
     enabled: !!companyId,
@@ -59,7 +59,18 @@ export default function Assistant() {
   });
 
   if (!activeCompany) return <div className="rounded-xl border border-[#282E40] bg-[#181C26] p-8 text-center text-[#94A3B8]">Selecione uma empresa primeiro.</div>;
-  if (isLoading || !workspace) return <div className="rounded-xl border border-[#282E40] bg-[#181C26] p-8 text-center text-[#94A3B8]">Carregando Assistente IA…</div>;
+  if (isLoading) return <div className="rounded-xl border border-[#282E40] bg-[#181C26] p-8 text-center text-[#94A3B8]">Carregando Assistente IA…</div>;
+  if (error) {
+    const message = error instanceof ApiError ? error.message : "Não foi possível carregar o Assistente IA.";
+    return (
+      <div className="space-y-3 rounded-xl border border-[#7F1D1D] bg-[#24151A] p-6 text-[#FCA5A5]">
+        <h1 className="text-lg font-semibold text-[#FECACA]">Assistente IA indisponível</h1>
+        <p className="text-sm">{message}</p>
+        <p className="text-xs text-[#FDA4AF]">A estrutura do Assistente precisa estar aplicada no Supabase para esta empresa.</p>
+      </div>
+    );
+  }
+  if (!workspace) return <div className="rounded-xl border border-[#282E40] bg-[#181C26] p-8 text-center text-[#94A3B8]">Nenhuma empresa selecionada.</div>;
   const update = (values: Partial<AiAssistant>) => setForm((current) => ({ ...current, ...values }));
 
   return (
