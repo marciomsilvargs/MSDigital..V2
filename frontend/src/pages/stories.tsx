@@ -436,9 +436,9 @@ export default function Stories() {
                 <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-3 rounded-xl border border-[#282E40] bg-[#10131B] p-4 sm:flex-row sm:items-center">
                   <div className="h-16 w-9 shrink-0 overflow-hidden rounded bg-[#202534]">
                     {story.media_type === "image" ? (
-                      <img src={story.media_url} alt="" className="h-full w-full object-cover" />
+                      <img src={story.url ?? story.media_url} alt="Story agendado" className="h-full w-full object-cover" />
                     ) : (
-                      <video src={story.media_url} className="h-full w-full object-cover" muted />
+                      <video src={story.url ?? story.media_url} className="h-full w-full object-cover" controls playsInline preload="metadata" aria-label="Reproduzir vídeo do story" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
