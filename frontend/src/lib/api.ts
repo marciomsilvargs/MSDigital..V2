@@ -246,7 +246,18 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
     if (!scheduleAt || Number.isNaN(Date.parse(scheduleAt))) throw new ApiError(400, "Escolha uma data e horário válidos.");
     const conn = await result<Row | null>(db().from("connections").select("state,source,enabled_features").eq("company_id", companyId).maybeSingle());
     const execution = conn && ["connected", "partially_connected"].includes(conn.state) && conn.enabled_features?.includes("publish") ? conn.source : "pending";
-    return await insertRow("stories", { company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(scheduleAt).toISOString(), status: payload.as_draft ? "draft" : "scheduled", execution }) as T;
+    let deleteAt: string | null = null;
+    if (payload.delete_at) {
+      if (Number.isNaN(Date.parse(String(payload.delete_at)))) throw new ApiError(400, "Escolha uma data de exclusão válida.");
+      deleteAt = new Date(String(payload.delete_at)).toISOString();
+      if (Date.parse(deleteAt) <= Date.parse(scheduleAt)) throw new ApiError(400, "A exclusão deve ocorrer depois da publicação.");
+    }
+    return await insertRow("stories", { company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(scheduleAt).toISOString(), delete_at: deleteAt, delete_status: deleteAt && !payload.as_draft ? "scheduled" : "not_scheduled", status: payload.as_draft ? "draft" : "scheduled", execution }) as T;
+  }
+  if (parts[2] === "story-insights" && parts.length === 3 && method === "GET") {
+    const stories = await result<Row[]>(db().from("stories").select("id,caption,schedule_at,published_at,platform_id,status").eq("company_id", companyId).order("published_at", { ascending: false }));
+    const insights = await result<Row[]>(db().from("story_insights").select("story_id,captured_at,impressions,reach,replies,exits,taps_forward,taps_back").eq("company_id", companyId).order("captured_at", { ascending: true }));
+    return { stories, insights } as T;
   }
   if (parts[2] === "stories" && parts[3]) {
     const storyId = parts[3];
@@ -279,6 +290,18 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
         const scheduleAt = String(payload.schedule_at);
         if (Number.isNaN(Date.parse(scheduleAt))) throw new ApiError(400, "Escolha uma data e horário válidos.");
         updates.schedule_at = new Date(scheduleAt).toISOString();
+      }
+      if (payload.delete_at !== undefined) {
+        if (payload.delete_at === null || payload.delete_at === "") {
+          updates.delete_at = null;
+          updates.delete_status = "not_scheduled";
+        } else {
+          const deleteAt = String(payload.delete_at);
+          if (Number.isNaN(Date.parse(deleteAt))) throw new ApiError(400, "Escolha uma data de exclusão válida.");
+          if (Date.parse(deleteAt) <= Date.parse(current.schedule_at)) throw new ApiError(400, "A exclusão deve ocorrer depois da publicação.");
+          updates.delete_at = new Date(deleteAt).toISOString();
+          updates.delete_status = "scheduled";
+        }
       }
       if (payload.status !== undefined) {
         if (payload.status !== "canceled") throw new ApiError(400, "Use as ações dedicadas para publicar ou tentar novamente.");

@@ -83,6 +83,22 @@ export async function createAndPublishStory(igId: string, token: string, mediaUr
   return String(published.id || "");
 }
 
+export async function fetchStoryInsights(mediaId: string, token: string, flow: string) {
+  const base = graphBase(flow);
+  const metrics = "impressions,reach,replies,exits,taps_forward,taps_back";
+  try {
+    return await graphRequest(`${base}/${encodeURIComponent(mediaId)}/insights?` + new URLSearchParams({ metric: metrics }), token);
+  } catch (error) {
+    // Meta can reject metrics that are unavailable for a specific account or
+    // API version. Keep the useful core metrics in that case.
+    return await graphRequest(`${base}/${encodeURIComponent(mediaId)}/insights?` + new URLSearchParams({ metric: "impressions,reach" }), token);
+  }
+}
+
+export async function deleteInstagramMedia(mediaId: string, token: string, flow: string) {
+  return await graphRequest(`${graphBase(flow)}/${encodeURIComponent(mediaId)}`, token, { method: "DELETE" });
+}
+
 export async function sendInstagramMessage(igId: string, recipientId: string, text: string, token: string, flow: string) {
   return await graphRequest(`${graphBase(flow)}/${encodeURIComponent(igId)}/messages`, token, {
     method: "POST", headers: { "content-type": "application/json" },
@@ -96,3 +112,4 @@ export async function replyToComment(commentId: string, text: string, token: str
     method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body,
   });
 }
+

@@ -104,7 +104,22 @@ export interface Story {
   execution: string;
   platform_id: string;
   published_at: string | null;
+  delete_at: string | null;
+  delete_status: "not_scheduled" | "scheduled" | "deleting" | "deleted" | "failed";
+  deleted_at: string | null;
+  delete_error: string | null;
   created_at: string;
+}
+
+export interface StoryInsight {
+  story_id: string;
+  captured_at: string;
+  impressions: number | null;
+  reach: number | null;
+  replies: number | null;
+  exits: number | null;
+  taps_forward: number | null;
+  taps_back: number | null;
 }
 
 export interface Message {

@@ -14,6 +14,7 @@ import {
 import { ptBR } from "date-fns/locale";
 import {
   CalendarClock,
+  BarChart3,
   CheckCircle2,
   Clapperboard,
   Copy,
@@ -27,7 +28,7 @@ import {
 import { toast } from "sonner";
 import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm, ApiError } from "@/lib/api";
 import { companyKey, useCompanies } from "@/lib/company-context";
-import type { ConnectionStatus, MediaItem, Story, StoryStatus } from "@/lib/types";
+import type { ConnectionStatus, MediaItem, Story, StoryInsight, StoryStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,11 @@ export default function Stories() {
     queryFn: () => apiGet<Story[]>(`/companies/${companyId}/stories`),
     enabled: !!companyId,
   });
+  const { data: insightPayload } = useQuery({
+    queryKey: companyKey(companyId, "story-insights"),
+    queryFn: () => apiGet<{ stories: Story[]; insights: StoryInsight[] }>(`/companies/${companyId}/story-insights`),
+    enabled: !!companyId,
+  });
   const { data: connStatus } = useQuery({
     queryKey: companyKey(companyId, "connection"),
     queryFn: () => apiGet<ConnectionStatus>(`/companies/${companyId}/connection`),
@@ -88,6 +94,7 @@ export default function Stories() {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [caption, setCaption] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
+  const [deleteAt, setDeleteAt] = useState("");
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [mediaUrl, setMediaUrl] = useState("");
   const [view, setView] = useState("week");
@@ -99,6 +106,19 @@ export default function Stories() {
   const connection = connStatus?.connection ?? null;
   const connected = connection?.state === "connected" || connection?.state === "partially_connected";
   const activeMedia = selectedMedia ?? media[0] ?? null;
+  const latestInsightByStory = new Map<string, StoryInsight>();
+  for (const insight of insightPayload?.insights ?? []) latestInsightByStory.set(insight.story_id, insight);
+  const hourlyPerformance = new Map<number, { reach: number; impressions: number }>();
+  for (const story of stories) {
+    const insight = latestInsightByStory.get(story.id);
+    if (!insight || !story.published_at) continue;
+    const hour = new Date(story.published_at).getHours();
+    const current = hourlyPerformance.get(hour) ?? { reach: 0, impressions: 0 };
+    current.reach += Number(insight.reach ?? 0);
+    current.impressions += Number(insight.impressions ?? 0);
+    hourlyPerformance.set(hour, current);
+  }
+  const bestHour = [...hourlyPerformance.entries()].sort((a, b) => b[1].reach - a[1].reach)[0];
 
   function errorToast(error: unknown) {
     const detail = error instanceof ApiError ? (error.body as { detail?: string } | null)?.detail : undefined;
@@ -108,6 +128,7 @@ export default function Stories() {
 
   function invalidateStories() {
     queryClient.invalidateQueries({ queryKey: companyKey(companyId, "stories") });
+    queryClient.invalidateQueries({ queryKey: companyKey(companyId, "story-insights") });
     queryClient.invalidateQueries({ queryKey: companyKey(companyId, "reports") });
   }
 
@@ -151,11 +172,13 @@ export default function Stories() {
         media_id: activeMedia!.id,
         caption,
         schedule_at: scheduleAt ? new Date(scheduleAt).toISOString() : new Date().toISOString(),
+        delete_at: deleteAt ? new Date(deleteAt).toISOString() : null,
         as_draft: asDraft,
       }),
     onSuccess: (_data, asDraft) => {
       invalidateStories();
       setCaption("");
+      setDeleteAt("");
       toast.success(asDraft ? "Rascunho salvo." : "Story agendado com sucesso! Publicação automática no horário programado.");
     },
     onError: errorToast,
@@ -331,6 +354,18 @@ export default function Stories() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="story-delete-when" className="text-[#94A3B8]">Excluir do Instagram em (opcional)</Label>
+              <Input
+                id="story-delete-when"
+                type="datetime-local"
+                value={deleteAt}
+                onChange={(e) => setDeleteAt(e.target.value)}
+                data-testid="story-delete-datetime-input"
+                className="border-[#282E40] bg-[#10131B] text-[#F8FAFC]"
+              />
+              <p className="text-xs text-[#64748B]">Se ficar vazio, o Instagram remove o Story automaticamente após 24 horas.</p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="story-when" className="text-[#94A3B8]">Data e hora</Label>
               <Input
                 id="story-when"
@@ -368,6 +403,20 @@ export default function Stories() {
           </div>
         </Card>
       </div>
+
+      <Card className="border-[#282E40] bg-[#181C26]" data-testid="story-insights-card">
+        <div className="flex items-center gap-2 p-5 pb-2">
+          <BarChart3 className="h-4 w-4 text-[#C5A46D]" />
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#C5A46D]">Desempenho dos Stories</p>
+        </div>
+        <div className="px-5 pb-5 text-sm text-[#94A3B8]">
+          {bestHour ? (
+            <p>Melhor horário até agora: <strong className="text-[#F8FAFC]">{String(bestHour[0]).padStart(2, "0")}:00</strong> · alcance somado <strong className="text-[#F8FAFC]">{bestHour[1].reach}</strong>.</p>
+          ) : (
+            <p>As métricas aparecerão depois que os próximos Stories forem publicados e o agendador fizer a primeira coleta.</p>
+          )}
+        </div>
+      </Card>
 
       {/* Calendar + history */}
       <Card className="border-[#282E40] bg-[#181C26]" data-testid="story-calendar-card">
@@ -461,6 +510,8 @@ export default function Stories() {
                       {story.attempts > 0 && (
                         <span className="text-xs text-[#FBBF24]">{story.attempts} tentativa{story.attempts > 1 ? "s" : ""}</span>
                       )}
+                      {story.delete_status === "scheduled" && story.delete_at && <span className="text-xs text-[#FBBF24]">exclusão {format(parseISO(story.delete_at), "dd/MM HH:mm")}</span>}
+                      {story.delete_status === "deleted" && <span className="text-xs text-[#94A3B8]">removido do Instagram</span>}
                     </div>
                     <p className="mt-1 truncate text-sm text-[#F8FAFC]">{story.caption || "Sem legenda"}</p>
                     {story.last_error && (
@@ -468,6 +519,7 @@ export default function Stories() {
                         {story.last_error}
                       </p>
                     )}
+                    {story.delete_error && <p className="mt-1 rounded bg-[#221318] px-2 py-1 text-xs text-[#F87171]">Falha na exclusão: {story.delete_error}</p>}
                   </div>
                   <div className="flex shrink-0 gap-1.5">
                     {["draft", "scheduled", "failed"].includes(story.status) && (
