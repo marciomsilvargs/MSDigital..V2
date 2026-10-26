@@ -104,6 +104,7 @@ export interface Story {
   execution: string;
   platform_id: string;
   published_at: string | null;
+  crop_scale: number;
   delete_at: string | null;
   delete_status: "not_scheduled" | "scheduled" | "deleting" | "deleted" | "failed";
   deleted_at: string | null;

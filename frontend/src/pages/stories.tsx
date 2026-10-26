@@ -101,6 +101,7 @@ export default function Stories() {
   const [selectedDay, setSelectedDay] = useState(new Date());
   const [previewStory, setPreviewStory] = useState<Story | null>(null);
   const [previewFit, setPreviewFit] = useState<"cover" | "contain">("contain");
+  const [previewScale, setPreviewScale] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const connection = connStatus?.connection ?? null;
@@ -173,6 +174,7 @@ export default function Stories() {
         caption,
         schedule_at: scheduleAt ? new Date(scheduleAt).toISOString() : new Date().toISOString(),
         delete_at: deleteAt ? new Date(deleteAt).toISOString() : null,
+        crop_scale: previewScale,
         as_draft: asDraft,
       }),
     onSuccess: (_data, asDraft) => {
@@ -308,9 +310,15 @@ export default function Stories() {
             <div className="relative aspect-[9/16] w-full max-w-[240px] overflow-hidden rounded-2xl border-4 border-[#282E40] bg-[#0D1017]" data-testid="story-preview-frame">
               {activeMedia ? (
                 activeMedia.media_type === "image" ? (
-                  <img src={activeMedia.url} alt="Pré-visualização do story" className={cn("h-full w-full", previewFit === "cover" ? "object-cover" : "object-contain")} />
+                  <>
+                    <img src={activeMedia.url} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-xl" />
+                    <img src={activeMedia.url} alt="Pré-visualização do story" className={cn("relative h-full w-full transition-transform duration-150", previewFit === "cover" ? "object-cover" : "object-contain")} style={{ transform: `scale(${previewScale})` }} />
+                  </>
                 ) : (
-                  <video src={activeMedia.url} className={cn("h-full w-full", previewFit === "cover" ? "object-cover" : "object-contain")} muted autoPlay loop controls playsInline preload="metadata" />
+                  <>
+                    <video src={activeMedia.url} aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-45 blur-xl" muted autoPlay loop playsInline preload="metadata" />
+                    <video src={activeMedia.url} aria-label="Pré-visualização do story" className={cn("relative h-full w-full transition-transform duration-150", previewFit === "cover" ? "object-cover" : "object-contain")} style={{ transform: `scale(${previewScale})` }} muted autoPlay loop controls playsInline preload="metadata" />
+                  </>
                 )
               ) : (
                 <div className="flex h-full items-center justify-center text-[#94A3B8]">
@@ -331,6 +339,25 @@ export default function Stories() {
               <span className="text-xs text-[#94A3B8]">Ajuste:</span>
               <Button type="button" size="sm" variant={previewFit === "contain" ? "secondary" : "ghost"} onClick={() => setPreviewFit("contain")} data-testid="story-fit-contain" className="h-7 px-2 text-xs">Conter</Button>
               <Button type="button" size="sm" variant={previewFit === "cover" ? "secondary" : "ghost"} onClick={() => setPreviewFit("cover")} data-testid="story-fit-cover" className="h-7 px-2 text-xs">Preencher</Button>
+            </div>
+            <div className="mt-4 w-full max-w-[240px] space-y-1.5">
+              <div className="flex items-center justify-between text-xs text-[#94A3B8]">
+                <label htmlFor="story-preview-scale">Tamanho no Story</label>
+                <span className="font-medium text-[#E9D2A8]">{Math.round(previewScale * 100)}%</span>
+              </div>
+              <input
+                id="story-preview-scale"
+                type="range"
+                min="1"
+                max="3"
+                step="0.05"
+                value={previewScale}
+                onChange={(event) => setPreviewScale(Number(event.target.value))}
+                aria-label="Ajustar tamanho da mídia no Story"
+                data-testid="story-preview-scale"
+                className="h-2 w-full cursor-pointer accent-[#C5A46D]"
+              />
+              <div className="flex justify-between text-[10px] text-[#64748B]"><span>Menor</span><span>Maior</span></div>
             </div>
             <p className="mt-1 text-xs text-[#94A3B8]">Pré-visualização 9:16 · a mídia mantém a proporção original</p>
           </div>

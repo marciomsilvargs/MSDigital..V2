@@ -252,7 +252,8 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
       deleteAt = new Date(String(payload.delete_at)).toISOString();
       if (Date.parse(deleteAt) <= Date.parse(scheduleAt)) throw new ApiError(400, "A exclusão deve ocorrer depois da publicação.");
     }
-    return await insertRow("stories", { company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(scheduleAt).toISOString(), delete_at: deleteAt, delete_status: deleteAt && !payload.as_draft ? "scheduled" : "not_scheduled", status: payload.as_draft ? "draft" : "scheduled", execution }) as T;
+    const cropScale = Math.min(3, Math.max(1, Number(payload.crop_scale || 1)));
+    return await insertRow("stories", { company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(scheduleAt).toISOString(), crop_scale: cropScale, delete_at: deleteAt, delete_status: deleteAt && !payload.as_draft ? "scheduled" : "not_scheduled", status: payload.as_draft ? "draft" : "scheduled", execution }) as T;
   }
   if (parts[2] === "story-insights" && parts.length === 3 && method === "GET") {
     const stories = await result<Row[]>(db().from("stories").select("id,caption,schedule_at,published_at,platform_id,status").eq("company_id", companyId).order("published_at", { ascending: false }));
@@ -303,6 +304,7 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
           updates.delete_status = "scheduled";
         }
       }
+      if (payload.crop_scale !== undefined) updates.crop_scale = Math.min(3, Math.max(1, Number(payload.crop_scale || 1)));
       if (payload.status !== undefined) {
         if (payload.status !== "canceled") throw new ApiError(400, "Use as ações dedicadas para publicar ou tentar novamente.");
         updates.status = "canceled";
