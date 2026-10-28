@@ -619,15 +619,15 @@ export default function Stories() {
                   </div>
                   <div className="flex shrink-0 gap-1.5">
                     {["draft", "scheduled", "failed"].includes(story.status) && (
-                      <Button size="sm" variant="outline" data-testid={`story-publish-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "publish" })} disabled={!connected} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Publicar agora">
+                      <Button size="sm" variant="outline" data-testid={`story-publish-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "publish" })} disabled={!connected} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Publicar agora" title="Publicar agora">
                         <Play className="h-3.5 w-3.5" />
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" data-testid={`story-duplicate-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "duplicate" })} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Duplicar">
+                    <Button size="sm" variant="outline" data-testid={`story-duplicate-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "duplicate" })} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Duplicar" title="Duplicar Story">
                       <Copy className="h-3.5 w-3.5" />
                     </Button>
                     {story.status === "failed" && (
-                      <Button size="sm" variant="outline" data-testid={`story-retry-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "retry" })} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Tentar novamente">
+                      <Button size="sm" variant="outline" data-testid={`story-retry-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "retry" })} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Tentar novamente" title="Tentar novamente">
                         <RotateCcw className="h-3.5 w-3.5" />
                       </Button>
                     )}
