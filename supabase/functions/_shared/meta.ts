@@ -1,12 +1,13 @@
 export const IG_SCOPES = [
   "instagram_business_basic",
   "instagram_business_content_publish",
+  "instagram_business_manage_insights",
   "instagram_business_manage_comments",
   "instagram_business_manage_messages",
 ];
 export const FB_SCOPES = [
   "instagram_basic", "instagram_content_publish", "instagram_manage_comments",
-  "instagram_manage_messages", "pages_show_list", "pages_read_engagement",
+  "instagram_manage_messages", "instagram_manage_insights", "pages_show_list", "pages_read_engagement",
 ];
 
 export function apiVersion(flow: string): string {

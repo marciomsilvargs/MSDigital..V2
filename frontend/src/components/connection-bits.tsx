@@ -54,10 +54,12 @@ export const CONNECTION_STATE_META: Record<ConnectionState, { label: string; bad
 export const SCOPE_LABELS: Record<string, string> = {
   instagram_business_basic: "Identidade, perfil e mídia da conta",
   instagram_business_content_publish: "Publicar Stories no horário programado",
+  instagram_business_manage_insights: "Consultar alcance e visualizações dos Stories",
   instagram_business_manage_comments: "Ler e responder comentários",
   instagram_business_manage_messages: "Ler e responder mensagens (Direct)",
   instagram_basic: "Identidade, perfil e mídia da conta",
   instagram_content_publish: "Publicar Stories no horário programado",
+  instagram_manage_insights: "Consultar alcance e visualizações dos Stories",
   instagram_manage_comments: "Ler e responder comentários",
   instagram_manage_messages: "Ler e responder mensagens (Direct)",
   pages_show_list: "Listar as Páginas do Facebook que você administra",
@@ -215,3 +217,4 @@ export function ConnectionErrorPanel({ error, hint }: { error: string; hint: str
     </div>
   );
 }
+
