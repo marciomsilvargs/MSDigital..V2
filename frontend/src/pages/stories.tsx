@@ -95,6 +95,9 @@ export default function Stories() {
   const [caption, setCaption] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
   const [deleteAt, setDeleteAt] = useState("");
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [repeatEndDate, setRepeatEndDate] = useState("");
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [mediaUrl, setMediaUrl] = useState("");
   const [view, setView] = useState("week");
@@ -133,6 +136,20 @@ export default function Stories() {
     queryClient.invalidateQueries({ queryKey: companyKey(companyId, "reports") });
   }
 
+  function repeatDates() {
+    if (!repeatEnabled || !scheduleAt || !repeatEndDate || repeatDays.length === 0) return [];
+    const first = new Date(scheduleAt);
+    const end = new Date(`${repeatEndDate}T23:59:59`);
+    const dates: string[] = [];
+    const cursor = new Date(first);
+    cursor.setHours(first.getHours(), first.getMinutes(), 0, 0);
+    while (cursor <= end && dates.length < 366) {
+      if (repeatDays.includes(cursor.getDay())) dates.push(cursor.toISOString());
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return dates;
+  }
+
   const uploadMutation = useMutation({
     mutationFn: (file: File) => {
       const form = new FormData();
@@ -169,19 +186,24 @@ export default function Stories() {
 
   const scheduleMutation = useMutation({
     mutationFn: (asDraft: boolean) =>
-      apiPost<Story>(`/companies/${companyId}/stories`, {
+      apiPost<Story | Story[]>(`/companies/${companyId}/stories`, {
         media_id: activeMedia!.id,
         caption,
         schedule_at: scheduleAt ? new Date(scheduleAt).toISOString() : new Date().toISOString(),
         delete_at: deleteAt ? new Date(deleteAt).toISOString() : null,
         crop_scale: previewScale,
+        repeat_dates: asDraft ? [] : repeatDates(),
         as_draft: asDraft,
       }),
-    onSuccess: (_data, asDraft) => {
+    onSuccess: (data, asDraft) => {
       invalidateStories();
       setCaption("");
       setDeleteAt("");
-      toast.success(asDraft ? "Rascunho salvo." : "Story agendado com sucesso! Publicação automática no horário programado.");
+      setRepeatEnabled(false);
+      setRepeatEndDate("");
+      setRepeatDays([]);
+      const count = Array.isArray(data) ? data.length : 1;
+      toast.success(asDraft ? "Rascunho salvo." : count > 1 ? `${count} Stories agendados com sucesso!` : "Story agendado com sucesso! Publicação automática no horário programado.");
     },
     onError: errorToast,
   });
@@ -387,6 +409,7 @@ export default function Stories() {
                 type="datetime-local"
                 value={deleteAt}
                 onChange={(e) => setDeleteAt(e.target.value)}
+                disabled={repeatEnabled}
                 data-testid="story-delete-datetime-input"
                 className="border-[#282E40] bg-[#10131B] text-[#F8FAFC]"
               />
@@ -398,15 +421,61 @@ export default function Stories() {
                 id="story-when"
                 type="datetime-local"
                 value={scheduleAt}
-                onChange={(e) => setScheduleAt(e.target.value)}
+                onChange={(e) => {
+                  setScheduleAt(e.target.value);
+                  if (repeatEnabled && repeatDays.length === 0 && e.target.value) setRepeatDays([new Date(e.target.value).getDay()]);
+                }}
                 data-testid="story-datetime-input"
                 className="border-[#282E40] bg-[#10131B] text-[#F8FAFC]"
               />
             </div>
+            <div className="rounded-lg border border-[#282E40] bg-[#10131B] p-3">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-[#F8FAFC]">
+                <input
+                  type="checkbox"
+                  checked={repeatEnabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setRepeatEnabled(enabled);
+                    if (enabled && repeatDays.length === 0 && scheduleAt) setRepeatDays([new Date(scheduleAt).getDay()]);
+                    if (!enabled) { setRepeatEndDate(""); setRepeatDays([]); }
+                  }}
+                  data-testid="story-repeat-toggle"
+                  className="h-4 w-4 accent-[#C5A46D]"
+                />
+                <span>Repetir este Story</span>
+              </label>
+              {repeatEnabled && (
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="story-repeat-until" className="text-xs text-[#94A3B8]">Repetir até</Label>
+                    <Input
+                      id="story-repeat-until"
+                      type="date"
+                      value={repeatEndDate}
+                      onChange={(event) => setRepeatEndDate(event.target.value)}
+                      min={scheduleAt ? scheduleAt.slice(0, 10) : undefined}
+                      data-testid="story-repeat-end-date"
+                      className="border-[#282E40] bg-[#181C26] text-[#F8FAFC]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <span className="text-xs text-[#94A3B8]">Dias da semana</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((label, day) => {
+                        const selected = repeatDays.includes(day);
+                        return <button key={label} type="button" onClick={() => setRepeatDays((current) => selected ? current.filter((item) => item !== day) : [...current, day].sort())} className={cn("rounded-md border px-2 py-1 text-xs transition-colors", selected ? "border-[#C5A46D] bg-[#2A2317] text-[#E9D2A8]" : "border-[#282E40] text-[#94A3B8] hover:border-[#C5A46D]/60")} aria-pressed={selected}>{label}</button>;
+                      })}
+                    </div>
+                  </div>
+                  <p className="text-xs text-[#64748B]">Mesmo horário do primeiro agendamento. Serão criadas até 366 ocorrências.</p>
+                </div>
+              )}
+            </div>
             <div className="flex flex-col gap-2">
               <Button
                 data-testid="story-schedule-submit"
-                disabled={!activeMedia || scheduleMutation.isPending}
+                disabled={!activeMedia || scheduleMutation.isPending || (repeatEnabled && (!repeatEndDate || repeatDays.length === 0 || repeatDates().length === 0))}
                 onClick={() => scheduleMutation.mutate(false)}
                 className="bg-[#C5A46D] font-semibold text-[#10131B] hover:bg-[#D8B77E]"
               >

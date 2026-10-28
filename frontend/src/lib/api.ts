@@ -253,7 +253,13 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
       if (Date.parse(deleteAt) <= Date.parse(scheduleAt)) throw new ApiError(400, "A exclusão deve ocorrer depois da publicação.");
     }
     const cropScale = Math.min(3, Math.max(1, Number(payload.crop_scale || 1)));
-    return await insertRow("stories", { company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(scheduleAt).toISOString(), crop_scale: cropScale, delete_at: deleteAt, delete_status: deleteAt && !payload.as_draft ? "scheduled" : "not_scheduled", status: payload.as_draft ? "draft" : "scheduled", execution }) as T;
+    const repeatDates = Array.isArray(payload.repeat_dates) ? payload.repeat_dates.filter((value: unknown): value is string => typeof value === "string") : [];
+    const schedules = repeatDates.length > 0 && !payload.as_draft ? [...new Set(repeatDates)] : [new Date(scheduleAt).toISOString()];
+    if (schedules.length > 366) throw new ApiError(400, "O período pode gerar no máximo 366 ocorrências.");
+    for (const value of schedules) if (Number.isNaN(Date.parse(value))) throw new ApiError(400, "Há uma data inválida na repetição.");
+    const rows = schedules.map((scheduledAt) => ({ company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(scheduledAt).toISOString(), crop_scale: cropScale, delete_at: schedules.length === 1 ? deleteAt : null, delete_status: schedules.length === 1 && deleteAt ? "scheduled" : "not_scheduled", status: payload.as_draft ? "draft" : "scheduled", execution }));
+    if (rows.length === 1) return await insertRow("stories", rows[0]) as T;
+    return await result<Row[]>(db().from("stories").insert(rows).select("*")) as T;
   }
   if (parts[2] === "story-insights" && parts.length === 3 && method === "GET") {
     const stories = await result<Row[]>(db().from("stories").select("id,caption,schedule_at,published_at,platform_id,status").eq("company_id", companyId).order("published_at", { ascending: false }));
