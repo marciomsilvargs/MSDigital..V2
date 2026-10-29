@@ -2,6 +2,7 @@
 alter table public.stories
   add column if not exists delete_at timestamptz,
   add column if not exists delete_status text not null default 'not_scheduled',
+  add column if not exists delete_attempts integer not null default 0,
   add column if not exists deleted_at timestamptz,
   add column if not exists delete_error text;
 

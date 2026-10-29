@@ -7,7 +7,7 @@ export const IG_SCOPES = [
 ];
 export const FB_SCOPES = [
   "instagram_basic", "instagram_content_publish", "instagram_manage_comments",
-  "instagram_manage_messages", "pages_show_list", "pages_read_engagement",
+  "instagram_manage_messages", "instagram_manage_contents", "pages_show_list", "pages_read_engagement",
 ];
 
 export function apiVersion(flow: string): string {
@@ -25,7 +25,10 @@ export async function graphRequest(path: string, token: string, init: RequestIni
   headers.set("authorization", `Bearer ${token}`);
   const response = await fetch(path, { ...init, headers });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data?.error?.message || `Graph API retornou HTTP ${response.status}.`);
+  if (!response.ok) {
+    const code = data?.error?.code ? ` (#${data.error.code})` : "";
+    throw new Error(`${data?.error?.message || `Graph API retornou HTTP ${response.status}.`}${code}`);
+  }
   return data;
 }
 

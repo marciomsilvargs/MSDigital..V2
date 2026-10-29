@@ -318,12 +318,14 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
         if (payload.delete_at === null || payload.delete_at === "") {
           updates.delete_at = null;
           updates.delete_status = "not_scheduled";
+          updates.delete_attempts = 0;
         } else {
           const deleteAt = String(payload.delete_at);
           if (Number.isNaN(Date.parse(deleteAt))) throw new ApiError(400, "Escolha uma data de exclusão válida.");
           if (Date.parse(deleteAt) <= Date.parse(current.schedule_at)) throw new ApiError(400, "A exclusão deve ocorrer depois da publicação.");
           updates.delete_at = new Date(deleteAt).toISOString();
           updates.delete_status = "scheduled";
+          updates.delete_attempts = 0;
         }
       }
       if (payload.crop_scale !== undefined) updates.crop_scale = Math.min(3, Math.max(1, Number(payload.crop_scale || 1)));
@@ -551,4 +553,3 @@ export const apiPostForm = async <T>(path: string, form: FormData): Promise<T> =
   if (signedError) fail(signedError);
   return await insertRow("media", { company_id: companyId, media_type: file.type.startsWith("video/") ? "video" : "image", url: `storage://media/${objectPath}`, storage_path: objectPath, name: sourceFile.name }).then((row: any) => ({ ...row, url: signed.signedUrl })) as T;
 };
-

@@ -87,14 +87,23 @@ Deno.serve(async (req) => {
       .eq("delete_status", "scheduled").lte("delete_at", now.toISOString()).limit(50);
     if (deleteQueryError) throw deleteQueryError;
     for (const story of deleteDue || []) {
-      await admin.from("stories").update({ delete_status: "deleting", delete_error: null }).eq("id", story.id).eq("delete_status", "scheduled");
+      const deleteAttempt = Number(story.delete_attempts || 0) + 1;
+      await admin.from("stories").update({ delete_status: "deleting", delete_attempts: deleteAttempt, delete_error: null }).eq("id", story.id).eq("delete_status", "scheduled");
       try {
         if (!story.platform_id) throw new Error("O Story ainda não possui um ID publicado no Instagram.");
         const conn = await realConnection(admin, story.company_id);
         await deleteInstagramMedia(story.platform_id, conn.token, conn.login_flow);
         await admin.from("stories").update({ delete_status: "deleted", deleted_at: now.toISOString(), delete_error: null }).eq("id", story.id);
       } catch (error) {
-        await admin.from("stories").update({ delete_status: "failed", delete_error: error instanceof Error ? error.message.slice(0, 500) : "Falha ao excluir o Story." }).eq("id", story.id);
+        const message = error instanceof Error ? error.message.slice(0, 500) : "Falha ao excluir o Story.";
+        // Retry transient Meta failures a few times. Keep the row scheduled so
+        // the next cron tick can recover after a token refresh/reconnection.
+        const retryable = deleteAttempt < 3;
+        await admin.from("stories").update({
+          delete_status: retryable ? "scheduled" : "failed",
+          delete_at: retryable ? new Date(now.getTime() + deleteAttempt * 5 * 60_000).toISOString() : story.delete_at,
+          delete_error: message,
+        }).eq("id", story.id);
       }
     }
 

@@ -212,7 +212,7 @@ export default function Stories() {
   });
 
   const storyAction = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "publish" | "duplicate" | "retry" | "cancel" | "delete" }) => {
+    mutationFn: ({ id, action }: { id: string; action: "publish" | "duplicate" | "retry" | "retry-delete" | "cancel" | "delete" }) => {
       const base = `/companies/${companyId}/stories/${id}`;
       switch (action) {
         case "publish":
@@ -221,6 +221,8 @@ export default function Stories() {
           return apiPost<Story>(`${base}/duplicate`);
         case "retry":
           return apiPost<Story>(`${base}/retry`);
+        case "retry-delete":
+          return apiPatch<Story>(base, { delete_at: new Date().toISOString() });
         case "cancel":
           return apiPatch<Story>(base, { status: "canceled" });
         case "delete":
@@ -239,6 +241,7 @@ export default function Stories() {
         publish: "Story publicado!",
         duplicate: "Story duplicado — ajuste o horário.",
         retry: "Story reagendado para nova tentativa.",
+        "retry-delete": "Exclusão colocada novamente na fila.",
         cancel: "Story cancelado.",
         delete: "Story excluído.",
       };
@@ -686,7 +689,12 @@ export default function Stories() {
                         {story.last_error}
                       </p>
                     )}
-                    {story.delete_error && <p className="mt-1 rounded bg-[#221318] px-2 py-1 text-xs text-[#F87171]">Falha na exclusão: {story.delete_error}</p>}
+                    {story.delete_error && (
+                      <div className="mt-1 flex flex-wrap items-center gap-2 rounded bg-[#221318] px-2 py-1 text-xs text-[#F87171]">
+                        <span>Falha na exclusão: {story.delete_error}</span>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => storyAction.mutate({ id: story.id, action: "retry-delete" })} disabled={storyAction.isPending} className="h-6 px-2 text-xs text-[#FBBF24] hover:bg-[#3A2520]">Tentar exclusão</Button>
+                      </div>
+                    )}
                   </div>
                   <div className="flex shrink-0 gap-1.5">
                     {["draft", "scheduled", "failed"].includes(story.status) && (
