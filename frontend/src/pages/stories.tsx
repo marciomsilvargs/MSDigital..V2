@@ -105,6 +105,9 @@ export default function Stories() {
   const [previewStory, setPreviewStory] = useState<Story | null>(null);
   const [previewFit, setPreviewFit] = useState<"cover" | "contain">("contain");
   const [previewScale, setPreviewScale] = useState(1);
+  const [selectedStoryIds, setSelectedStoryIds] = useState<string[]>([]);
+  const [historyFilter, setHistoryFilter] = useState<"all" | "scheduled" | "published" | "canceled" | "failed">("all");
+  const [historySearch, setHistorySearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const connection = connStatus?.connection ?? null;
@@ -225,6 +228,12 @@ export default function Stories() {
       }
     },
     onSuccess: (_data, vars) => {
+      queryClient.setQueryData<Story[]>(companyKey(companyId, "stories"), (current) => {
+        if (!current) return current;
+        if (vars.action === "delete") return current.filter((story) => story.id !== vars.id);
+        if (vars.action === "cancel") return current.map((story) => story.id === vars.id ? { ...story, status: "canceled" } : story);
+        return current;
+      });
       invalidateStories();
       const messages: Record<string, string> = {
         publish: "Story publicado!",
@@ -234,6 +243,27 @@ export default function Stories() {
         delete: "Story excluído.",
       };
       toast.success(messages[vars.action]);
+    },
+    onError: errorToast,
+  });
+
+  const bulkStoryAction = useMutation({
+    mutationFn: async ({ ids, action }: { ids: string[]; action: "cancel" | "delete" }) => {
+      await Promise.all(ids.map((id) => {
+        const base = `/companies/${companyId}/stories/${id}`;
+        return action === "cancel" ? apiPatch<Story>(base, { status: "canceled" }) : apiDelete<Story>(base);
+      }));
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.setQueryData<Story[]>(companyKey(companyId, "stories"), (current) => {
+        if (!current) return current;
+        const ids = new Set(vars.ids);
+        if (vars.action === "delete") return current.filter((story) => !ids.has(story.id));
+        return current.map((story) => ids.has(story.id) ? { ...story, status: "canceled" } : story);
+      });
+      setSelectedStoryIds([]);
+      invalidateStories();
+      toast.success(vars.action === "cancel" ? "Agendamentos cancelados." : "Stories excluídos.");
     },
     onError: errorToast,
   });
@@ -249,6 +279,17 @@ export default function Stories() {
   const weekDays = eachDayOfInterval({ start: startOfWeek(selectedDay, { weekStartsOn: 0 }), end: endOfWeek(selectedDay, { weekStartsOn: 0 }) });
   const monthDays = eachDayOfInterval({ start: startOfMonth(selectedDay), end: endOfMonth(selectedDay) });
   const storiesOfDay = (day: Date) => stories.filter((s) => isSameDay(parseISO(s.schedule_at), day));
+  const filteredHistoryStories = [...stories]
+    .reverse()
+    .filter((story) => historyFilter === "all" || story.status === historyFilter)
+    .filter((story) => {
+      const query = historySearch.trim().toLowerCase();
+      return !query || (story.caption || "").toLowerCase().includes(query) || format(parseISO(story.schedule_at), "dd/MM/yyyy HH:mm").includes(query);
+    });
+  const selectableHistoryStories = filteredHistoryStories.filter((story) => ["draft", "scheduled"].includes(story.status));
+  const allSelectableSelected = selectableHistoryStories.length > 0 && selectableHistoryStories.every((story) => selectedStoryIds.includes(story.id));
+  const selectedStories = stories.filter((story) => selectedStoryIds.includes(story.id));
+  const selectedCancelable = selectedStories.filter((story) => ["draft", "scheduled"].includes(story.status));
 
   return (
     <div className="space-y-6">
@@ -585,9 +626,37 @@ export default function Stories() {
           </TabsContent>
 
           <TabsContent value="history" className="px-5 pb-5" data-testid="story-history-list">
-            <div className="space-y-3">
-              {[...stories].reverse().map((story) => (
+            <div className="mb-4 rounded-xl border border-[#282E40] bg-[#10131B] p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-[#F8FAFC]">Gerenciar agendamentos</p>
+                  <p className="text-xs text-[#94A3B8]">Selecione vários Stories para cancelar ou excluir de uma vez.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Buscar legenda ou data" aria-label="Buscar agendamentos" className="h-8 w-44 border-[#282E40] bg-[#181C26] text-xs text-[#F8FAFC]" />
+                  {(["all", "scheduled", "published", "canceled", "failed"] as const).map((filter) => (
+                    <Button key={filter} type="button" size="sm" variant={historyFilter === filter ? "secondary" : "ghost"} onClick={() => setHistoryFilter(filter)} className="h-8 px-2 text-xs">
+                      {{ all: "Todos", scheduled: "Agendados", published: "Publicados", canceled: "Cancelados", failed: "Falhos" }[filter]}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#282E40] pt-3">
+                <label className="flex items-center gap-2 text-xs text-[#CBD5E1]">
+                  <input type="checkbox" checked={allSelectableSelected} onChange={(event) => setSelectedStoryIds(event.target.checked ? selectableHistoryStories.map((story) => story.id) : [])} className="h-4 w-4 accent-[#C5A46D]" aria-label="Selecionar todos os agendamentos visíveis" />
+                  Selecionar agendados visíveis ({selectableHistoryStories.length})
+                </label>
+                <span className="text-xs text-[#64748B]">{selectedStoryIds.length} selecionado(s)</span>
+                <div className="ml-auto flex gap-2">
+                  <Button type="button" size="sm" variant="outline" disabled={selectedCancelable.length === 0 || bulkStoryAction.isPending} onClick={() => { if (window.confirm(`Cancelar ${selectedCancelable.length} agendamento(s)?`)) bulkStoryAction.mutate({ ids: selectedCancelable.map((story) => story.id), action: "cancel" }); }} className="h-8 border-[#6B5360] px-2 text-xs text-[#FBBF24] hover:bg-[#2A2024]">Cancelar selecionados</Button>
+                  <Button type="button" size="sm" variant="outline" disabled={selectedStories.length === 0 || bulkStoryAction.isPending} onClick={() => { if (window.confirm(`Excluir ${selectedStories.length} Story(s) permanentemente?`)) bulkStoryAction.mutate({ ids: selectedStories.map((story) => story.id), action: "delete" }); }} className="h-8 border-[#6B5360] px-2 text-xs text-[#F87171] hover:bg-[#221318]">Excluir selecionados</Button>
+                </div>
+              </div>
+            </div>
+            <div className="stories-scrollbar max-h-[620px] space-y-3 overflow-y-auto pr-1">
+              {filteredHistoryStories.map((story) => (
                 <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-3 rounded-xl border border-[#282E40] bg-[#10131B] p-4 sm:flex-row sm:items-center">
+                  <input type="checkbox" checked={selectedStoryIds.includes(story.id)} onChange={(event) => setSelectedStoryIds((current) => event.target.checked ? [...new Set([...current, story.id])] : current.filter((id) => id !== story.id))} aria-label={`Selecionar Story de ${format(parseISO(story.schedule_at), "dd/MM HH:mm")}`} className="h-4 w-4 shrink-0 accent-[#C5A46D]" />
                   <button type="button" onClick={() => setPreviewStory(story)} className="relative h-16 w-9 shrink-0 overflow-hidden rounded bg-[#202534]" aria-label="Abrir pré-visualização do story">
                     {story.media_type === "image" ? (
                       <img src={story.url ?? story.media_url} alt="Story agendado" className="h-full w-full object-cover" />
@@ -645,7 +714,7 @@ export default function Stories() {
                   </div>
                 </div>
               ))}
-              {stories.length === 0 && <p className="py-8 text-center text-sm text-[#94A3B8]">Nenhum story agendado ainda.</p>}
+              {filteredHistoryStories.length === 0 && <p className="py-8 text-center text-sm text-[#94A3B8]">Nenhum Story encontrado com esses filtros.</p>}
             </div>
           </TabsContent>
         </Tabs>

@@ -240,7 +240,20 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
   if (parts[2] === "stories" && parts.length === 3 && method === "GET") {
     let q = db().from("stories").select("*").eq("company_id", companyId).order("schedule_at");
     if (query.get("status")) q = q.eq("status", query.get("status"));
-    return await withSignedMedia(await result<Row[]>(q), "media_storage_path") as T;
+    const rows = await result<Row[]>(q);
+    // Uma repetição de 30 dias pode gerar centenas de ocorrências da mesma arte.
+    // Assinar cada ocorrência individualmente deixa a tela lenta; assine cada
+    // caminho único uma única vez e reutilize a URL nas linhas correspondentes.
+    const paths = [...new Set(rows.map((row) => row.media_storage_path).filter((path): path is string => Boolean(path)))];
+    const signedByPath = new Map<string, string>();
+    await Promise.all(paths.map(async (path) => {
+      const { data, error } = await db().storage.from("media").createSignedUrl(path, 3600);
+      if (!error && data?.signedUrl) signedByPath.set(path, data.signedUrl);
+    }));
+    return rows.map((row) => {
+      const url = row.media_storage_path ? signedByPath.get(row.media_storage_path) : undefined;
+      return url ? { ...row, url } : row;
+    }) as T;
   }
   if (parts[2] === "stories" && parts.length === 3 && method === "POST") {
     const media = await result<Row | null>(db().from("media").select("*").eq("id", payload.media_id).eq("company_id", companyId).maybeSingle());
