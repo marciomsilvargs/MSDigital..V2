@@ -80,7 +80,10 @@ async function withSignedMedia<T extends Row>(rows: T[], pathKey = "storage_path
   return await Promise.all(rows.map(async (row) => {
     if (!row[pathKey]) return row;
     const { data, error } = await client.storage.from("media").createSignedUrl(row[pathKey], 3600);
-    if (error) fail(error);
+    // A mídia pode continuar válida no registro mesmo quando a URL assinada
+    // falha temporariamente. Não descarte toda a lista de Stories por causa
+    // de um único arquivo; o histórico deve continuar visível.
+    if (error || !data?.signedUrl) return row;
     return { ...row, url: data.signedUrl };
   }));
 }
