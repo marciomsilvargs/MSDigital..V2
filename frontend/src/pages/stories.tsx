@@ -658,9 +658,9 @@ export default function Stories() {
             </div>
             <div className="stories-scrollbar max-h-[620px] space-y-3 overflow-y-auto pr-1">
               {filteredHistoryStories.map((story) => (
-                <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-3 rounded-xl border border-[#282E40] bg-[#10131B] p-4 sm:flex-row sm:items-center">
+                <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-4 rounded-xl border border-[#282E40] bg-[#10131B] p-5 sm:flex-row sm:items-center">
                   <input type="checkbox" checked={selectedStoryIds.includes(story.id)} onChange={(event) => setSelectedStoryIds((current) => event.target.checked ? [...new Set([...current, story.id])] : current.filter((id) => id !== story.id))} aria-label={`Selecionar Story de ${format(parseISO(story.schedule_at), "dd/MM HH:mm")}`} className="h-4 w-4 shrink-0 accent-[#C5A46D]" />
-                  <button type="button" onClick={() => setPreviewStory(story)} className="relative h-16 w-9 shrink-0 overflow-hidden rounded bg-[#202534]" aria-label="Abrir pré-visualização do story">
+                  <button type="button" onClick={() => setPreviewStory(story)} className="relative h-24 w-14 shrink-0 overflow-hidden rounded-lg bg-[#202534]" aria-label="Abrir pré-visualização do story">
                     {story.media_type === "image" ? (
                       <img src={story.url ?? story.media_url} alt="Story agendado" className="h-full w-full object-cover" />
                     ) : (
@@ -674,7 +674,7 @@ export default function Stories() {
                       {story.status === "published" && story.execution && (
                         <SourceBadge source={story.execution} testid={`story-execution-${story.id}`} />
                       )}
-                      <span className="text-xs text-[#94A3B8]" data-testid={`story-when-${story.id}`}>
+                      <span className="text-sm text-[#94A3B8]" data-testid={`story-when-${story.id}`}>
                         {format(parseISO(story.schedule_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
                       </span>
                       {story.attempts > 0 && (
@@ -683,7 +683,7 @@ export default function Stories() {
                       {story.delete_status === "scheduled" && story.delete_at && <span className="text-xs text-[#FBBF24]">exclusão {format(parseISO(story.delete_at), "dd/MM HH:mm")}</span>}
                       {story.delete_status === "deleted" && <span className="text-xs text-[#94A3B8]">removido do Instagram</span>}
                     </div>
-                    <p className="mt-1 truncate text-sm text-[#F8FAFC]">{story.caption || "Sem legenda"}</p>
+                    <p className="mt-1 truncate text-base text-[#F8FAFC]">{story.caption || "Sem legenda"}</p>
                     {story.last_error && (
                       <p className="mt-1 rounded bg-[#221318] px-2 py-1 text-xs text-[#F87171]" data-testid={`story-error-${story.id}`}>
                         {story.last_error}
@@ -696,7 +696,7 @@ export default function Stories() {
                       </div>
                     )}
                   </div>
-                  <div className="flex shrink-0 gap-1.5">
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     {["draft", "scheduled", "failed"].includes(story.status) && (
                       <Button size="sm" variant="outline" data-testid={`story-publish-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "publish" })} disabled={!connected} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Publicar agora" title="Publicar agora">
                         <Play className="h-3.5 w-3.5" />
