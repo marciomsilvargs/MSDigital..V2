@@ -131,3 +131,28 @@
     @apply font-sans;
     }
 }
+
+/* Keep long media libraries contained without losing the app's dark visual language. */
+.stories-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #4b556b transparent;
+}
+
+.stories-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.stories-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.stories-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+  background-color: #4b556b;
+}
+
+.stories-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #c5a46d;
+}

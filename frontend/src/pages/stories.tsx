@@ -265,8 +265,8 @@ export default function Stories() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Library */}
-        <Card className="border-[#282E40] bg-[#181C26] lg:col-span-4" data-testid="story-library-card">
-          <div className="flex items-center justify-between p-5 pb-3">
+        <Card className="flex flex-col border-[#282E40] bg-[#181C26] lg:col-span-4 lg:max-h-[760px]" data-testid="story-library-card">
+          <div className="flex shrink-0 items-center justify-between p-5 pb-3">
             <p className="text-xs font-semibold uppercase tracking-widest text-[#C5A46D]">Biblioteca de mídias</p>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" data-testid="media-upload-button" onClick={() => fileInputRef.current?.click()} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]">
@@ -289,7 +289,8 @@ export default function Stories() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 px-5 pb-5">
+          <div className="stories-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+            <div className="grid grid-cols-3 gap-2">
             {media.map((item) => (
               <div
                 key={item.id}
@@ -323,6 +324,7 @@ export default function Stories() {
             {media.length === 0 && (
               <p className="col-span-3 py-8 text-center text-sm text-[#94A3B8]">Nenhuma mídia na biblioteca.</p>
             )}
+            </div>
           </div>
         </Card>
 
@@ -515,7 +517,7 @@ export default function Stories() {
       </Card>
 
       {/* Calendar + history */}
-      <Card className="border-[#282E40] bg-[#181C26]" data-testid="story-calendar-card">
+      <Card className="min-h-[440px] border-[#282E40] bg-[#181C26]" data-testid="story-calendar-card">
         <Tabs value={view} onValueChange={setView}>
           <div className="flex flex-wrap items-center justify-between gap-3 p-5 pb-3">
             <TabsList className="bg-[#10131B]">
@@ -539,7 +541,7 @@ export default function Stories() {
                   data-testid={`calendar-day-${format(day, "yyyy-MM-dd")}`}
                   onClick={() => setSelectedDay(day)}
                   className={cn(
-                    "min-h-24 rounded-lg border p-2 text-left transition-colors",
+                    "min-h-32 rounded-lg border p-2 text-left transition-colors",
                     isSameDay(day, selectedDay) ? "border-[#C5A46D] bg-[#2A2317]" : "border-[#282E40] bg-[#10131B] hover:border-[#C5A46D]/40"
                   )}
                 >
@@ -567,7 +569,7 @@ export default function Stories() {
                   data-testid={`calendar-day-${format(day, "yyyy-MM-dd")}`}
                   onClick={() => setSelectedDay(day)}
                   className={cn(
-                    "min-h-16 rounded-lg border p-1.5 text-left transition-colors",
+                    "min-h-28 rounded-lg border p-2 text-left transition-colors",
                     isSameDay(day, selectedDay) ? "border-[#C5A46D] bg-[#2A2317]" : "border-[#282E40] bg-[#10131B] hover:border-[#C5A46D]/40"
                   )}
                 >
