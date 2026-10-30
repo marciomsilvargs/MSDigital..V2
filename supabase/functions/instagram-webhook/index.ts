@@ -95,7 +95,7 @@ Deno.serve(async (req) => {
           await runAutomations(admin, companyId, "message_received", text, {
             conversationId: saved.conversationId, socialUserId: sender, publicName: String(event.sender?.username || ""),
           }, "real");
-          try { await runAiAssistant(admin, companyId, "message", text, saved.conversationId); }
+          try { await runAiAssistant(admin, companyId, "message", text, saved.conversationId, sender, String(event.sender?.username || "")); }
           catch (error) { console.error("AI assistant message reply failed", error); }
         }
       }
@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
         await runAutomations(admin, companyId, "comment_received", text, {
           commentId: comment.id, socialUserId: String(value.from?.id || ""), publicName: String(value.from?.username || ""),
         }, "real");
-        try { await runAiAssistant(admin, companyId, "comment", text, comment.id); }
+        try { await runAiAssistant(admin, companyId, "comment", text, comment.id, String(value.from?.id || ""), String(value.from?.username || "")); }
         catch (error) { console.error("AI assistant comment reply failed", error); }
       }
     }

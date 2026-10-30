@@ -1,47 +1,13 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { realConnection } from "./connections.ts";
+import { normalizeIntentText, upsertAssociationLead, type LeadContext } from "./leads.ts";
 import { replyToComment, sendInstagramMessage } from "./meta.ts";
 
-type EventContext = { conversationId?: string; commentId?: string; socialUserId?: string; publicName?: string };
+type EventContext = LeadContext;
 const nodeData = (node: Record<string, any>) => node?.data && typeof node.data === "object" ? node.data as Record<string, any> : {};
-export const normalizeIntentText = (value: unknown) => String(value || "")
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .toLocaleLowerCase("pt-BR")
-  .replace(/[^a-z0-9]+/g, " ")
-  .trim();
 const keywordVariants = (value: unknown) => (Array.isArray(value) ? value : String(value || "").split(","))
   .map((item) => normalizeIntentText(item))
   .filter(Boolean);
-
-const associationIntent = (value: string) => /\b(quero|associ|soci[oa]|plano|mensalidade|valor|beneficio|custa|fazer parte|conhecer)\b/.test(value);
-
-async function upsertAssociationLead(admin: SupabaseClient, companyId: string, context: EventContext, text: string) {
-  const socialUserId = String(context.socialUserId || "").trim();
-  if (!socialUserId || !associationIntent(normalizeIntentText(text))) return;
-  const now = new Date().toISOString();
-  const { data: existing, error: readError } = await admin.from("crm_leads")
-    .select("id,stage")
-    .eq("company_id", companyId).eq("social_network", "instagram").eq("social_user_id", socialUserId)
-    .maybeSingle();
-  if (readError) throw readError;
-  if (existing) {
-    await admin.from("crm_leads").update({ last_interaction_at: now, updated_at: now, last_conversation_id: context.conversationId || null })
-      .eq("id", existing.id).eq("company_id", companyId);
-    return;
-  }
-  const { error } = await admin.from("crm_leads").insert({
-    company_id: companyId, social_network: "instagram", social_user_id: socialUserId,
-    public_name: String(context.publicName || ""), source: triggerSource(context), interest_type: "association",
-    stage: "new", first_interaction_at: now, last_interaction_at: now,
-    last_conversation_id: context.conversationId || null,
-  });
-  if (error && error.code !== "23505") throw error;
-}
-
-function triggerSource(context: EventContext) {
-  return context.commentId ? "instagram_comment" : "instagram_direct";
-}
 
 export async function runAutomations(admin: SupabaseClient, companyId: string, triggerKind: "comment_received" | "message_received", text: string, context: EventContext = {}, source = "real") {
   const { data: automations, error } = await admin.from("automations").select("*").eq("company_id", companyId).eq("enabled", true);

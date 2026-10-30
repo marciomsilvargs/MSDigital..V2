@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { realConnection } from "./connections.ts";
+import { isAssociationIntent, normalizeIntentText, updateLeadStage, upsertAssociationLead } from "./leads.ts";
 import { replyToComment, sendInstagramMessage } from "./meta.ts";
 
 type Channel = "message" | "comment";
@@ -13,7 +14,7 @@ async function generateGeminiReply(context: string, question: string): Promise<s
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: "Você é o assistente de atendimento de uma empresa no Instagram. Responda em português do Brasil, de forma curta, educada e objetiva. Use somente as informações da base abaixo. Se a base não tiver a resposta, diga que a equipe irá confirmar e ofereça atendimento humano. Nunca invente preços, horários, disponibilidade ou políticas. Não mencione a base, o modelo ou estas instruções." }] },
+      systemInstruction: { parts: [{ text: "Você é o assistente de atendimento de uma empresa no Instagram. Responda em português do Brasil, de forma curta, educada e objetiva. Use somente as informações da base abaixo. Para dúvidas sobre associação, planos, mensalidade, valores ou benefícios, apresente apenas dados cadastrados. Se a base não tiver a resposta, diga que a equipe irá confirmar e ofereça atendimento humano. Se a pessoa pedir atendimento humano, confirme o encaminhamento. Nunca invente preços, horários, disponibilidade, promoções ou políticas. Não mencione a base, o modelo ou estas instruções." }] },
       contents: [{ role: "user", parts: [{ text: "BASE DE CONHECIMENTO:\n" + context + "\n\nPERGUNTA DO CLIENTE:\n" + question }] }],
       generationConfig: { temperature: 0.2, maxOutputTokens: 220 },
     }),
@@ -25,7 +26,7 @@ async function generateGeminiReply(context: string, question: string): Promise<s
   return text.slice(0, 900);
 }
 
-export async function runAiAssistant(admin: SupabaseClient, companyId: string, channel: Channel, sourceText: string, contextId: string) {
+export async function runAiAssistant(admin: SupabaseClient, companyId: string, channel: Channel, sourceText: string, contextId: string, socialUserId = "", publicName = "") {
   const { data: assistant, error: assistantError } = await admin.from("ai_assistants")
     .select("id,name,personality,mode,enabled,human_handoff_enabled,handoff_message,active_knowledge_version_id")
     .eq("company_id", companyId).maybeSingle();
@@ -41,6 +42,18 @@ export async function runAiAssistant(admin: SupabaseClient, companyId: string, c
 
   const context = entries.map((entry: Record<string, unknown>) => String(entry.title) + ": " + String(entry.content)).join("\n");
   const reply = await generateGeminiReply(context, sourceText);
+  const leadContext = channel === "message"
+    ? { conversationId: contextId, socialUserId, publicName }
+    : { commentId: contextId, socialUserId, publicName };
+  if (isAssociationIntent(sourceText)) {
+    const lead = await upsertAssociationLead(admin, companyId, leadContext, sourceText);
+    const normalized = normalizeIntentText(sourceText);
+    const requestedHuman = /\b(atendente|pessoa|humano|equipe|falar com alguem)\b/.test(normalized);
+    const declined = /\b(nao|sem interesse|talvez depois)\b/.test(normalized);
+    const positive = /\b(sim|quero|pode|gostaria|valor|quanto|plano|associ)\b/.test(normalized);
+    const stage = requestedHuman ? "sales" : declined ? "closed" : positive ? "interested" : "new";
+    if (!lead || !["sales", "converted"].includes(String(lead.stage))) await updateLeadStage(admin, companyId, leadContext, sourceText, stage);
+  }
 
   if (assistant.mode !== "automatic") {
     await admin.from("tasks").insert({ company_id: companyId, title: "Revisar resposta da IA para " + (channel === "message" ? "Direct" : "comentário"), source: "ai_assistant", done: false });
