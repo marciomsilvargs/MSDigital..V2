@@ -92,7 +92,9 @@ Deno.serve(async (req) => {
         if (!text || !sender || sender === String(account.ig_user_id)) continue;
         const saved = await saveInboundMessage(admin, companyId, String(entry.id), sender, text, String(event.message?.mid || ""));
         if (saved) {
-          await runAutomations(admin, companyId, "message_received", text, { conversationId: saved.conversationId }, "real");
+          await runAutomations(admin, companyId, "message_received", text, {
+            conversationId: saved.conversationId, socialUserId: sender, publicName: String(event.sender?.username || ""),
+          }, "real");
           try { await runAiAssistant(admin, companyId, "message", text, saved.conversationId); }
           catch (error) { console.error("AI assistant message reply failed", error); }
         }
@@ -108,11 +110,14 @@ Deno.serve(async (req) => {
         const { data: comment, error } = await admin.from("comments").insert({
           company_id: companyId, platform_comment_id: platformId, post_id: String(value.media?.id || ""),
           post_caption: "", author: String(value.from?.username || value.from?.id || "@desconhecido"),
+          author_platform_id: String(value.from?.id || ""),
           text, status: "new", source: "real",
         }).select("*").single();
         if (error?.code === "23505") continue;
         if (error) throw error;
-        await runAutomations(admin, companyId, "comment_received", text, { commentId: comment.id }, "real");
+        await runAutomations(admin, companyId, "comment_received", text, {
+          commentId: comment.id, socialUserId: String(value.from?.id || ""), publicName: String(value.from?.username || ""),
+        }, "real");
         try { await runAiAssistant(admin, companyId, "comment", text, comment.id); }
         catch (error) { console.error("AI assistant comment reply failed", error); }
       }
