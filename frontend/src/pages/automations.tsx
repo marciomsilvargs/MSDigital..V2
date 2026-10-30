@@ -38,7 +38,7 @@ type MSNode = Node<FlowNodeData>;
 
 const SUBTYPE_OPTIONS = {
   trigger: [
-    { value: "comment_received", label: "Comentário recebido" },
+    { value: "comment_received", label: "Comentário em post" },
     { value: "message_received", label: "Mensagem recebida" },
   ],
   condition: [
@@ -86,8 +86,8 @@ function ActionNode({ data }: NodeProps) {
 const nodeTypes = { msTrigger: TriggerNode, msCondition: ConditionNode, msAction: ActionNode };
 
 function defaultData(kind: FlowNodeData["kind"]): FlowNodeData {
-  if (kind === "trigger") return { kind, subtype: "comment_received", label: "Comentário recebido", keyword: "QUERO" };
-  if (kind === "condition") return { kind, subtype: "keyword", label: "Palavra-chave", keyword: "quero" };
+  if (kind === "trigger") return { kind, subtype: "comment_received", label: "Comentário em post", keyword: "" };
+  if (kind === "condition") return { kind, subtype: "keyword", label: "Palavra-chave", keyword: "" };
   return { kind, subtype: "create_task", label: "Criar tarefa", text: "Dar seguimento ao atendimento." };
 }
 
@@ -166,13 +166,27 @@ export default function Automations() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: (enabled: boolean) => apiPatch<Automation>(`/companies/${companyId}/automations/${automation!.id}`, { enabled }),
-    onSuccess: (_data, enabled) => {
+    mutationFn: ({ enabled, automationId }: { enabled: boolean; automationId: string }) => apiPatch<Automation>(`/companies/${companyId}/automations/${automationId}`, { enabled }),
+    onSuccess: (_data, { enabled }) => {
       invalidate();
       toast.success(enabled ? "Automação ativada!" : "Automação pausada.");
     },
     onError: errorToast,
   });
+
+  function toggleAutomation(target: Automation, enabled: boolean) {
+    if (enabled) {
+      const commentTrigger = target.nodes.find((node) => {
+        const data = node.data as FlowNodeData;
+        return data.kind === "trigger" && data.subtype === "comment_received";
+      });
+      if (commentTrigger && !(commentTrigger.data as FlowNodeData).keyword?.split(",").some((word) => word.trim())) {
+        toast.error("Adicione ao menos uma palavra-chave ao gatilho de comentário antes de ativar.");
+        return;
+      }
+    }
+    toggleMutation.mutate({ enabled, automationId: target.id });
+  }
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -181,8 +195,8 @@ export default function Automations() {
         description: newDescription,
         enabled: false,
         nodes: [
-          { id: "t1", type: "msTrigger", position: { x: 40, y: 160 }, data: { kind: "trigger", subtype: "comment_received", label: "Comentário recebido", keyword: "QUERO" } },
-          { id: "c1", type: "msCondition", position: { x: 340, y: 160 }, data: { kind: "condition", subtype: "keyword", label: "Palavra-chave", keyword: "quero" } },
+          { id: "t1", type: "msTrigger", position: { x: 40, y: 160 }, data: { kind: "trigger", subtype: "comment_received", label: "Comentário em post", keyword: "" } },
+          { id: "c1", type: "msCondition", position: { x: 340, y: 160 }, data: { kind: "condition", subtype: "keyword", label: "Palavra-chave", keyword: "" } },
           { id: "a1", type: "msAction", position: { x: 640, y: 160 }, data: { kind: "action", subtype: "reply_comment", label: "Responder comentário", text: "Olá! Obrigado pelo interesse — nossa equipe vai te chamar no direct." } },
         ],
         edges: [
@@ -226,6 +240,28 @@ export default function Automations() {
 
   function updateNodeData(id: string, updates: Partial<FlowNodeData>) {
     setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, ...updates } } : n)));
+  }
+
+  function keywordFields(value?: string) {
+    return value === undefined || value === "" ? [""] : value.split(",").map((keyword) => keyword.trim());
+  }
+
+  function updateKeywordField(nodeId: string, index: number, value: string) {
+    const fields = keywordFields((nodes.find((node) => node.id === nodeId)?.data as FlowNodeData | undefined)?.keyword);
+    fields[index] = value;
+    updateNodeData(nodeId, { keyword: fields.join(", ") });
+  }
+
+  function addKeywordField(nodeId: string) {
+    const fields = keywordFields((nodes.find((node) => node.id === nodeId)?.data as FlowNodeData | undefined)?.keyword);
+    fields.push("");
+    updateNodeData(nodeId, { keyword: fields.join(", ") });
+  }
+
+  function removeKeywordField(nodeId: string, index: number) {
+    const fields = keywordFields((nodes.find((node) => node.id === nodeId)?.data as FlowNodeData | undefined)?.keyword);
+    fields.splice(index, 1);
+    updateNodeData(nodeId, { keyword: fields.join(", ") });
   }
 
   function addNode(kind: FlowNodeData["kind"]) {
@@ -292,7 +328,7 @@ export default function Automations() {
                     data-testid={`automation-toggle-${a.id}`}
                     onChange={(e) => {
                       setSelectedId(a.id);
-                      toggleMutation.mutate(e.target.checked);
+                      toggleAutomation(a, e.target.checked);
                     }}
                     className="h-3.5 w-3.5 accent-[#C5A46D]"
                   />
@@ -384,14 +420,27 @@ export default function Automations() {
                         </Select>
                       </div>
                       {(nodeData.subtype === "keyword" || (nodeData.kind === "trigger" && nodeData.subtype === "comment_received")) && (
-                        <div className="space-y-1.5">
-                          <Label className="text-[10px] uppercase tracking-widest text-[#C5A46D]">Palavra-chave</Label>
-                          <Input
-                            value={nodeData.keyword ?? ""}
-                            onChange={(e) => updateNodeData(selectedNode!.id, { keyword: e.target.value })}
-                            data-testid="inspector-keyword-input"
-                            className="border-[#282E40] bg-[#10131B] text-xs text-[#F8FAFC]"
-                          />
+                        <div className="space-y-2 sm:col-span-2">
+                          <Label className="text-[10px] uppercase tracking-widest text-[#C5A46D]">Palavras-chave individuais</Label>
+                          {keywordFields(nodeData.keyword).map((keyword, index) => (
+                            <div key={`${selectedNode!.id}-keyword-${index}`} className="flex items-center gap-2">
+                              <Input
+                                value={keyword}
+                                onChange={(e) => updateKeywordField(selectedNode!.id, index, e.target.value)}
+                                data-testid={`inspector-keyword-input-${index}`}
+                                aria-label={`Palavra-chave ${index + 1}`}
+                                placeholder={index === 0 ? "Ex.: LINK" : "Outra variação"}
+                                className="border-[#282E40] bg-[#10131B] text-xs text-[#F8FAFC]"
+                              />
+                              {keywordFields(nodeData.keyword).length > 1 && (
+                                <Button type="button" size="sm" variant="outline" aria-label={`Remover palavra-chave ${index + 1}`} onClick={() => removeKeywordField(selectedNode!.id, index)} className="border-[#282E40] text-[#F87171]">×</Button>
+                              )}
+                            </div>
+                          ))}
+                          <Button type="button" size="sm" variant="outline" data-testid="add-keyword-field" onClick={() => addKeywordField(selectedNode!.id)} className="border-[#282E40] text-[#C5A46D]">+ Adicionar palavra-chave</Button>
+                          <p className="text-[10px] text-[#94A3B8]">
+                            {nodeData.kind === "trigger" ? "O fluxo será ativado quando o comentário contiver qualquer uma delas." : "O texto precisa conter pelo menos uma delas para continuar."}
+                          </p>
                         </div>
                       )}
                       {nodeData.subtype === "has_tag" && (
