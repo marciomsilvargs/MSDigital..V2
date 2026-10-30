@@ -4,6 +4,30 @@ import { isAssociationIntent, normalizeIntentText, updateLeadStage, upsertAssoci
 import { replyToComment, sendInstagramMessage } from "./meta.ts";
 
 type Channel = "message" | "comment";
+type KnowledgeEntry = { kind: string; title: string; content: string };
+
+function knowledgeReply(entries: KnowledgeEntry[], sourceText: string, handoffMessage: string, previousStage?: string) {
+  const normalized = normalizeIntentText(sourceText);
+  if (/\b(atendente|pessoa|humano|equipe|falar com alguem)\b/.test(normalized)) return handoffMessage;
+  if (/\b(nao|sem interesse|talvez depois)\b/.test(normalized)) return "Sem problemas! 😊 Agradecemos seu contato. Quando quiser conhecer melhor o Alpha Clube de Tiro, estaremos à disposição!";
+  const prices = entries.filter((entry) => entry.kind === "price");
+  const benefits = entries.filter((entry) => /beneficio|estrutura|vantagem/.test(normalizeIntentText(entry.title + " " + entry.content)));
+  const asksPrice = /\b(valor|valores|preco|precos|mensalidade|quanto custa|custa)\b/.test(normalized);
+  const asksBenefits = /\b(beneficio|beneficios|vantagem|estrutura)\b/.test(normalized);
+  const positive = /\b(sim|quero|pode mandar|tenho interesse|gostaria|plano|associ)\b/.test(normalized);
+  if (isAssociationIntent(sourceText) && (previousStage === "new" || !previousStage) && !asksPrice && !asksBenefits) {
+    return "Olá! 👋 Tudo bem?\n\nQue bom saber do seu interesse em fazer parte do Alpha Clube de Tiro! 🎯\n\nSerá um prazer apresentar nossos planos de associação, benefícios e condições.\n\nVocê gostaria de conhecer nossos planos?";
+  }
+  if ((asksPrice || positive) && prices.length) {
+    const details = prices.slice(0, 4).map((entry) => `• ${entry.title}: ${entry.content}`).join("\n");
+    return `Perfeito! 😊\n\nVou te apresentar as opções de associação disponíveis no Alpha Clube de Tiro.\n\n${details}\n\nAlgum desses planos chamou sua atenção? Posso encaminhar você para nossa equipe e ajudar com os próximos passos. 😊`;
+  }
+  if (asksBenefits && benefits.length) {
+    const details = benefits.slice(0, 4).map((entry) => `• ${entry.title}: ${entry.content}`).join("\n");
+    return `Com certeza! Vou te apresentar os benefícios disponíveis para os associados.\n\n${details}\n\nQuer que eu encaminhe você para nossa equipe?`;
+  }
+  return null;
+}
 
 async function generateGeminiReply(context: string, question: string): Promise<string> {
   const apiKey = Deno.env.get("GEMINI_API_KEY") || "";
@@ -41,12 +65,12 @@ export async function runAiAssistant(admin: SupabaseClient, companyId: string, c
   if (!entries?.length) return { skipped: true, reason: "knowledge_empty" };
 
   const context = entries.map((entry: Record<string, unknown>) => String(entry.title) + ": " + String(entry.content)).join("\n");
-  const reply = await generateGeminiReply(context, sourceText);
   const leadContext = channel === "message"
     ? { conversationId: contextId, socialUserId, publicName }
     : { commentId: contextId, socialUserId, publicName };
+  let lead: { id: string; stage: string } | null = null;
   if (isAssociationIntent(sourceText)) {
-    const lead = await upsertAssociationLead(admin, companyId, leadContext, sourceText);
+    lead = await upsertAssociationLead(admin, companyId, leadContext, sourceText);
     const normalized = normalizeIntentText(sourceText);
     const requestedHuman = /\b(atendente|pessoa|humano|equipe|falar com alguem)\b/.test(normalized);
     const declined = /\b(nao|sem interesse|talvez depois)\b/.test(normalized);
@@ -54,6 +78,8 @@ export async function runAiAssistant(admin: SupabaseClient, companyId: string, c
     const stage = requestedHuman ? "sales" : declined ? "closed" : positive ? "interested" : "new";
     if (!lead || !["sales", "converted"].includes(String(lead.stage))) await updateLeadStage(admin, companyId, leadContext, sourceText, stage);
   }
+  const reply = knowledgeReply(entries as KnowledgeEntry[], sourceText, assistant.handoff_message, lead?.stage)
+    || await generateGeminiReply(context, sourceText);
 
   if (assistant.mode !== "automatic") {
     await admin.from("tasks").insert({ company_id: companyId, title: "Revisar resposta da IA para " + (channel === "message" ? "Direct" : "comentário"), source: "ai_assistant", done: false });
