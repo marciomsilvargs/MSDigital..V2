@@ -19,6 +19,7 @@ import {
   Clapperboard,
   Copy,
   Link2,
+  Pencil,
   Play,
   RotateCcw,
   Trash2,
@@ -92,9 +93,11 @@ export default function Stories() {
   });
 
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>([]);
   const [caption, setCaption] = useState("");
   const [scheduleAt, setScheduleAt] = useState("");
-  const [deleteAt, setDeleteAt] = useState("");
+  const [editingStoryId, setEditingStoryId] = useState<string | null>(null);
+  const [slots, setSlots] = useState<Array<{ publishTime: string; deleteTime: string }>>([{ publishTime: "", deleteTime: "" }]);
   const [repeatEnabled, setRepeatEnabled] = useState(false);
   const [repeatEndDate, setRepeatEndDate] = useState("");
   const [repeatDays, setRepeatDays] = useState<number[]>([]);
@@ -108,11 +111,15 @@ export default function Stories() {
   const [selectedStoryIds, setSelectedStoryIds] = useState<string[]>([]);
   const [historyFilter, setHistoryFilter] = useState<"all" | "scheduled" | "published" | "canceled" | "failed">("all");
   const [historySearch, setHistorySearch] = useState("");
+  const [historyView, setHistoryView] = useState<"grouped" | "list">("grouped");
+  const [deleteEditStory, setDeleteEditStory] = useState<Story | null>(null);
+  const [deleteEditAt, setDeleteEditAt] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const connection = connStatus?.connection ?? null;
   const connected = connection?.state === "connected" || connection?.state === "partially_connected";
   const activeMedia = selectedMedia ?? media[0] ?? null;
+  const selectedMediaItems = media.filter((item) => selectedMediaIds.includes(item.id));
   const latestInsightByStory = new Map<string, StoryInsight>();
   for (const insight of insightPayload?.insights ?? []) latestInsightByStory.set(insight.story_id, insight);
   const hourlyPerformance = new Map<number, { reach: number; impressions: number }>();
@@ -139,15 +146,30 @@ export default function Stories() {
     queryClient.invalidateQueries({ queryKey: companyKey(companyId, "reports") });
   }
 
-  function repeatDates() {
-    if (!repeatEnabled || !scheduleAt || !repeatEndDate || repeatDays.length === 0) return [];
+  function repeatOccurrences() {
+    if (!scheduleAt || slots.length === 0) return [];
     const first = new Date(scheduleAt);
-    const end = new Date(`${repeatEndDate}T23:59:59`);
-    const dates: string[] = [];
-    const cursor = new Date(first);
-    cursor.setHours(first.getHours(), first.getMinutes(), 0, 0);
-    while (cursor <= end && dates.length < 366) {
-      if (repeatDays.includes(cursor.getDay())) dates.push(cursor.toISOString());
+    const startDate = new Date(first);
+    startDate.setHours(0, 0, 0, 0);
+    const end = repeatEnabled && repeatEndDate ? new Date(`${repeatEndDate}T23:59:59`) : startDate;
+    const dates: Array<{ publish_at: string; delete_at: string | null }> = [];
+    const cursor = new Date(startDate);
+    while (cursor <= end && dates.length < 1000) {
+      if (!repeatEnabled || repeatDays.includes(cursor.getDay())) for (const slot of slots) {
+        if (!slot.publishTime) continue;
+        const [hour, minute] = slot.publishTime.split(":").map(Number);
+        const publish = new Date(cursor);
+        publish.setHours(hour, minute, 0, 0);
+        let deletion: string | null = null;
+        if (slot.deleteTime) {
+          const [deleteHour, deleteMinute] = slot.deleteTime.split(":").map(Number);
+          const deleteDate = new Date(cursor);
+          deleteDate.setHours(deleteHour, deleteMinute, 0, 0);
+          if (deleteDate <= publish) deleteDate.setDate(deleteDate.getDate() + 1);
+          deletion = deleteDate.toISOString();
+        }
+        dates.push({ publish_at: publish.toISOString(), delete_at: deletion });
+      }
       cursor.setDate(cursor.getDate() + 1);
     }
     return dates;
@@ -188,25 +210,59 @@ export default function Stories() {
   });
 
   const scheduleMutation = useMutation({
-    mutationFn: (asDraft: boolean) =>
-      apiPost<Story | Story[]>(`/companies/${companyId}/stories`, {
+    mutationFn: (asDraft: boolean) => editingStoryId
+      ? apiPatch<Story>(`/companies/${companyId}/stories/${editingStoryId}`, {
+        caption,
+        schedule_at: repeatOccurrences()[0]?.publish_at ?? new Date(scheduleAt).toISOString(),
+        delete_at: repeatOccurrences()[0]?.delete_at ?? null,
+        crop_scale: previewScale,
+      })
+      : apiPost<Story | Story[]>(`/companies/${companyId}/stories`, {
         media_id: activeMedia!.id,
         caption,
-        schedule_at: scheduleAt ? new Date(scheduleAt).toISOString() : new Date().toISOString(),
-        delete_at: deleteAt ? new Date(deleteAt).toISOString() : null,
+        schedule_at: repeatOccurrences()[0]?.publish_at ?? new Date().toISOString(),
         crop_scale: previewScale,
-        repeat_dates: asDraft ? [] : repeatDates(),
+        repeat_occurrences: asDraft ? [] : repeatOccurrences(),
         as_draft: asDraft,
       }),
     onSuccess: (data, asDraft) => {
       invalidateStories();
       setCaption("");
-      setDeleteAt("");
+      setEditingStoryId(null);
+      setSlots([{ publishTime: "", deleteTime: "" }]);
       setRepeatEnabled(false);
       setRepeatEndDate("");
       setRepeatDays([]);
       const count = Array.isArray(data) ? data.length : 1;
       toast.success(asDraft ? "Rascunho salvo." : count > 1 ? `${count} Stories agendados com sucesso!` : "Story agendado com sucesso! Publicação automática no horário programado.");
+    },
+    onError: errorToast,
+  });
+
+  const sequenceScheduleMutation = useMutation({
+    mutationFn: async (asDraft: boolean) => {
+      const occurrences = repeatOccurrences();
+      const schedule = occurrences[0]?.publish_at ?? new Date(scheduleAt).toISOString();
+      const payload = (item: MediaItem) => ({
+        media_id: item.id,
+        caption,
+        schedule_at: schedule,
+        crop_scale: previewScale,
+        repeat_occurrences: asDraft ? [] : occurrences,
+        as_draft: asDraft,
+      });
+      return Promise.all(selectedMediaItems.map((item) => apiPost<Story | Story[]>(`/companies/${companyId}/stories`, payload(item))));
+    },
+    onSuccess: (results, asDraft) => {
+      invalidateStories();
+      setSelectedMediaIds([]);
+      setCaption("");
+      setSlots([{ publishTime: "", deleteTime: "" }]);
+      setRepeatEnabled(false);
+      setRepeatEndDate("");
+      setRepeatDays([]);
+      const count = results.reduce((total, result) => total + (Array.isArray(result) ? result.length : 1), 0);
+      toast.success(asDraft ? `${count} rascunhos salvos.` : `${count} Stories da sequência agendados com sucesso!`);
     },
     onError: errorToast,
   });
@@ -250,6 +306,18 @@ export default function Stories() {
     onError: errorToast,
   });
 
+  const deleteScheduleMutation = useMutation({
+    mutationFn: ({ id, deleteAt }: { id: string; deleteAt: string | null }) =>
+      apiPatch<Story>(`/companies/${companyId}/stories/${id}`, { delete_at: deleteAt }),
+    onSuccess: () => {
+      invalidateStories();
+      setDeleteEditStory(null);
+      setDeleteEditAt("");
+      toast.success("Regra de exclusão atualizada.");
+    },
+    onError: errorToast,
+  });
+
   const bulkStoryAction = useMutation({
     mutationFn: async ({ ids, action }: { ids: string[]; action: "cancel" | "delete" }) => {
       await Promise.all(ids.map((id) => {
@@ -289,10 +357,77 @@ export default function Stories() {
       const query = historySearch.trim().toLowerCase();
       return !query || (story.caption || "").toLowerCase().includes(query) || format(parseISO(story.schedule_at), "dd/MM/yyyy HH:mm").includes(query);
     });
+  const historyGroups = filteredHistoryStories.reduce<Record<string, Story[]>>((groups, story) => {
+    const key = format(parseISO(story.schedule_at), "yyyy-MM");
+    (groups[key] ??= []).push(story);
+    return groups;
+  }, {});
+  const historyGroupEntries = Object.entries(historyGroups).sort(([a], [b]) => b.localeCompare(a));
   const selectableHistoryStories = filteredHistoryStories.filter((story) => ["draft", "scheduled"].includes(story.status));
   const allSelectableSelected = selectableHistoryStories.length > 0 && selectableHistoryStories.every((story) => selectedStoryIds.includes(story.id));
   const selectedStories = stories.filter((story) => selectedStoryIds.includes(story.id));
   const selectedCancelable = selectedStories.filter((story) => ["draft", "scheduled"].includes(story.status));
+
+  function dateTimeLocalValue(value: string | null) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const pad = (number: number) => String(number).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function openDeleteEditor(story: Story) {
+    setDeleteEditStory(story);
+    setDeleteEditAt(dateTimeLocalValue(story.delete_at));
+  }
+
+  function toggleGroupSelection(groupStories: Story[]) {
+    const ids = groupStories.filter((story) => ["draft", "scheduled"].includes(story.status)).map((story) => story.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedStoryIds.includes(id));
+    setSelectedStoryIds((current) => allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])]);
+  }
+
+  function renderHistoryRow(story: Story) {
+    return (
+      <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-4 rounded-xl border border-[#282E40] bg-[#10131B] p-5 sm:flex-row sm:items-center">
+        <input type="checkbox" checked={selectedStoryIds.includes(story.id)} onChange={(event) => setSelectedStoryIds((current) => event.target.checked ? [...new Set([...current, story.id])] : current.filter((id) => id !== story.id))} aria-label={`Selecionar Story de ${format(parseISO(story.schedule_at), "dd/MM HH:mm")}`} className="h-4 w-4 shrink-0 accent-[#C5A46D]" />
+        <button type="button" onClick={() => setPreviewStory(story)} className="relative h-24 w-14 shrink-0 overflow-hidden rounded-lg bg-[#202534]" aria-label="Abrir pré-visualização do story">
+          {story.media_type === "image" ? (
+            <img src={story.url ?? story.media_url} alt="Story agendado" className="h-full w-full object-cover" />
+          ) : (
+            <video src={story.url ?? story.media_url} className="h-full w-full object-cover" muted playsInline preload="metadata" onContextMenu={(event) => event.preventDefault()} />
+          )}
+          {story.media_type === "video" && <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white"><Play className="h-4 w-4 fill-current" /></span>}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={story.status} testid={`story-status-${story.id}`} />
+            {story.status === "published" && story.execution && <SourceBadge source={story.execution} testid={`story-execution-${story.id}`} />}
+            <span className="text-sm text-[#94A3B8]" data-testid={`story-when-${story.id}`}>{format(parseISO(story.schedule_at), "dd/MM 'às' HH:mm", { locale: ptBR })}</span>
+            {story.attempts > 0 && <span className="text-xs text-[#FBBF24]">{story.attempts} tentativa{story.attempts > 1 ? "s" : ""}</span>}
+            {story.delete_status === "scheduled" && story.delete_at && <span className="text-xs text-[#FBBF24]">exclusão {format(parseISO(story.delete_at), "dd/MM HH:mm")}</span>}
+            {story.delete_status === "deleted" && <span className="text-xs text-[#94A3B8]">removido do Instagram</span>}
+          </div>
+          <p className="mt-1 truncate text-base text-[#F8FAFC]">{story.caption || "Sem legenda"}</p>
+          {story.last_error && <p className="mt-1 rounded bg-[#221318] px-2 py-1 text-xs text-[#F87171]" data-testid={`story-error-${story.id}`}>{story.last_error}</p>}
+          {story.delete_error && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 rounded bg-[#221318] px-2 py-1 text-xs text-[#F87171]">
+              <span>Falha na exclusão: {story.delete_error}</span>
+              <Button type="button" size="sm" variant="ghost" onClick={() => storyAction.mutate({ id: story.id, action: "retry-delete" })} disabled={storyAction.isPending} className="h-6 px-2 text-xs text-[#FBBF24] hover:bg-[#3A2520]">Tentar exclusão</Button>
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          { ["draft", "scheduled", "failed"].includes(story.status) && <Button size="sm" variant="outline" data-testid={`story-publish-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "publish" })} disabled={!connected} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Publicar agora" title="Publicar agora"><Play className="h-3.5 w-3.5" /></Button> }
+          <Button size="sm" variant="outline" data-testid={`story-duplicate-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "duplicate" })} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Duplicar" title="Duplicar Story"><Copy className="h-3.5 w-3.5" /></Button>
+          {story.status === "failed" && <Button size="sm" variant="outline" data-testid={`story-retry-${story.id}`} onClick={() => storyAction.mutate({ id: story.id, action: "retry" })} className="border-[#282E40] text-[#F8FAFC] hover:bg-[#202534]" aria-label="Tentar novamente" title="Tentar novamente"><RotateCcw className="h-3.5 w-3.5" /></Button>}
+          <Button size="sm" variant="outline" onClick={() => openDeleteEditor(story)} className="border-[#282E40] text-[#CBD5E1] hover:bg-[#202534]" aria-label="Editar exclusão" title={story.delete_at ? "Editar horário de exclusão" : "Definir horário de exclusão"}><Pencil className="h-3.5 w-3.5" /></Button>
+          {["draft", "scheduled"].includes(story.status) && <Button size="sm" variant="outline" data-testid={`story-cancel-${story.id}`} onClick={() => { if (window.confirm("Cancelar este agendamento?")) storyAction.mutate({ id: story.id, action: "cancel" }); }} disabled={storyAction.isPending} className="border-[#6B5360] text-[#FBBF24] hover:bg-[#2A2024]" aria-label="Cancelar agendamento" title="Cancelar agendamento"><XCircle className="mr-1.5 h-3.5 w-3.5" />Cancelar</Button>}
+          <Button size="sm" variant="outline" data-testid={`story-delete-${story.id}`} onClick={() => { if (window.confirm("Excluir este agendamento/story permanentemente?")) storyAction.mutate({ id: story.id, action: "delete" }); }} disabled={storyAction.isPending} className="border-[#282E40] text-[#F87171] hover:bg-[#221318]" aria-label="Excluir story" title="Excluir story"><Trash2 className="h-3.5 w-3.5" /></Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -333,6 +468,10 @@ export default function Stories() {
               />
             </div>
           </div>
+          <div className="flex shrink-0 items-center justify-between px-5 pb-3 text-xs">
+            <span className="text-[#94A3B8]">{selectedMediaItems.length > 0 ? `${selectedMediaItems.length} mídia${selectedMediaItems.length === 1 ? "" : "s"} selecionada${selectedMediaItems.length === 1 ? "" : "s"}` : "Selecione várias para uma sequência"}</span>
+            {selectedMediaItems.length > 0 && <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedMediaIds([])} className="h-7 px-2 text-xs text-[#E9D2A8]">Limpar seleção</Button>}
+          </div>
           <div className="stories-scrollbar min-h-0 flex-1 overflow-y-auto px-5 pb-5">
             <div className="grid grid-cols-3 gap-2">
             {media.map((item) => (
@@ -340,7 +479,7 @@ export default function Stories() {
                 key={item.id}
                 className={cn(
                   "group relative aspect-[9/16] overflow-hidden rounded-lg border-2 transition-colors",
-                  activeMedia?.id === item.id ? "border-[#C5A46D]" : "border-transparent hover:border-[#C5A46D]/40"
+                  selectedMediaIds.includes(item.id) ? "border-[#C5A46D]" : activeMedia?.id === item.id ? "border-[#C5A46D]/60" : "border-transparent hover:border-[#C5A46D]/40"
                 )}
               >
                 <button type="button" data-testid={`media-item-${item.id}`} onClick={() => setSelectedMedia(item)} aria-label={`Selecionar ${item.name}`} className="h-full w-full">
@@ -350,6 +489,9 @@ export default function Stories() {
                     <video src={item.url} className="h-full w-full object-cover" muted />
                   )}
                 </button>
+                <label className="absolute left-1 top-1 rounded-md bg-black/75 p-1.5 text-white shadow-sm" title="Selecionar para sequência">
+                  <input type="checkbox" checked={selectedMediaIds.includes(item.id)} onChange={(event) => setSelectedMediaIds((current) => event.target.checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id))} aria-label={`Incluir ${item.name} na sequência`} className="h-4 w-4 accent-[#C5A46D]" />
+                </label>
                 <button
                   type="button"
                   data-testid={`media-delete-${item.id}`}
@@ -449,31 +591,41 @@ export default function Stories() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="story-delete-when" className="text-[#94A3B8]">Excluir do Instagram em (opcional)</Label>
-              <Input
-                id="story-delete-when"
-                type="datetime-local"
-                value={deleteAt}
-                onChange={(e) => setDeleteAt(e.target.value)}
-                disabled={repeatEnabled}
-                data-testid="story-delete-datetime-input"
-                className="border-[#282E40] bg-[#10131B] text-[#F8FAFC]"
-              />
-              <p className="text-xs text-[#64748B]">Se ficar vazio, o Instagram remove o Story automaticamente após 24 horas.</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="story-when" className="text-[#94A3B8]">Data e hora</Label>
+              <Label htmlFor="story-when" className="text-[#94A3B8]">Primeira publicação</Label>
               <Input
                 id="story-when"
                 type="datetime-local"
                 value={scheduleAt}
                 onChange={(e) => {
                   setScheduleAt(e.target.value);
+                  if (e.target.value) setSlots((current) => current.map((slot, index) => index === 0 ? { ...slot, publishTime: e.target.value.slice(11, 16) } : slot));
                   if (repeatEnabled && repeatDays.length === 0 && e.target.value) setRepeatDays([new Date(e.target.value).getDay()]);
                 }}
                 data-testid="story-datetime-input"
                 className="border-[#282E40] bg-[#10131B] text-[#F8FAFC]"
               />
+            </div>
+            <div className="space-y-2 rounded-lg border border-[#282E40] bg-[#10131B] p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-widest text-[#C5A46D]">Horários do dia</span>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setSlots((current) => [...current, { publishTime: "", deleteTime: "" }])} className="h-7 px-2 text-xs text-[#E9D2A8]">+ Adicionar horário</Button>
+              </div>
+              <div className="space-y-2">
+                {slots.map((slot, index) => (
+                  <div key={`${index}-${slot.publishTime}`} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-[#94A3B8]">Publicar {index + 1}</label>
+                      <Input type="time" value={slot.publishTime} onChange={(event) => setSlots((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, publishTime: event.target.value } : item))} data-testid={`story-slot-publish-${index}`} className="border-[#282E40] bg-[#181C26] text-[#F8FAFC]" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-[#94A3B8]">Excluir em</label>
+                      <Input type="time" value={slot.deleteTime} onChange={(event) => setSlots((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, deleteTime: event.target.value } : item))} data-testid={`story-slot-delete-${index}`} className="border-[#282E40] bg-[#181C26] text-[#F8FAFC]" />
+                    </div>
+                    <Button type="button" size="icon" variant="ghost" disabled={slots.length === 1} onClick={() => setSlots((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="h-9 w-8 text-[#F87171]" aria-label={`Remover horário ${index + 1}`}><Trash2 className="h-3.5 w-3.5" /></Button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-[#64748B]">Exemplo: publicar às 08:00 e excluir às 11:30. Se a exclusão ficar vazia, o Story expira normalmente.</p>
             </div>
             <div className="rounded-lg border border-[#282E40] bg-[#10131B] p-3">
               <label className="flex cursor-pointer items-center gap-2 text-sm text-[#F8FAFC]">
@@ -521,12 +673,23 @@ export default function Stories() {
             <div className="flex flex-col gap-2">
               <Button
                 data-testid="story-schedule-submit"
-                disabled={!activeMedia || scheduleMutation.isPending || (repeatEnabled && (!repeatEndDate || repeatDays.length === 0 || repeatDates().length === 0))}
+                disabled={!activeMedia || scheduleMutation.isPending || !scheduleAt || !slots.some((slot) => slot.publishTime) || (repeatEnabled && (!repeatEndDate || repeatDays.length === 0 || repeatOccurrences().length === 0))}
                 onClick={() => scheduleMutation.mutate(false)}
                 className="bg-[#C5A46D] font-semibold text-[#10131B] hover:bg-[#D8B77E]"
               >
                 <CalendarClock className="h-4 w-4" /> Agendar Story
               </Button>
+              {selectedMediaItems.length > 1 && (
+                <Button
+                  data-testid="story-sequence-submit"
+                  variant="outline"
+                  disabled={sequenceScheduleMutation.isPending || scheduleMutation.isPending || !scheduleAt || !slots.some((slot) => slot.publishTime) || (repeatEnabled && (!repeatEndDate || repeatDays.length === 0 || repeatOccurrences().length === 0))}
+                  onClick={() => sequenceScheduleMutation.mutate(false)}
+                  className="border-[#C5A46D] text-[#E9D2A8] hover:bg-[#2A2317]"
+                >
+                  <CalendarClock className="h-4 w-4" /> Agendar sequência ({selectedMediaItems.length})
+                </Button>
+              )}
               <Button
                 data-testid="story-draft-submit"
                 variant="outline"
@@ -656,8 +819,29 @@ export default function Stories() {
                 </div>
               </div>
             </div>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[#282E40] bg-[#10131B] px-3 py-2">
+              <span className="text-xs text-[#94A3B8]">{filteredHistoryStories.length} registro{filteredHistoryStories.length === 1 ? "" : "s"} encontrado{filteredHistoryStories.length === 1 ? "" : "s"}</span>
+              <div className="flex items-center gap-1 rounded-md border border-[#282E40] bg-[#181C26] p-1" aria-label="Modo de visualização do histórico">
+                <Button type="button" size="sm" variant={historyView === "grouped" ? "secondary" : "ghost"} onClick={() => setHistoryView("grouped")} className="h-7 px-2 text-xs" data-testid="history-grouped-view">Por mês</Button>
+                <Button type="button" size="sm" variant={historyView === "list" ? "secondary" : "ghost"} onClick={() => setHistoryView("list")} className="h-7 px-2 text-xs" data-testid="history-list-view">Lista</Button>
+              </div>
+            </div>
             <div className="stories-scrollbar max-h-[620px] space-y-3 overflow-y-auto pr-1">
-              {filteredHistoryStories.map((story) => (
+              {historyView === "grouped" && historyGroupEntries.map(([month, groupStories]) => {
+                const monthLabel = format(parseISO(`${month}-01`), "MMMM 'de' yyyy", { locale: ptBR });
+                const groupSelectable = groupStories.filter((story) => ["draft", "scheduled"].includes(story.status));
+                const groupSelected = groupSelectable.length > 0 && groupSelectable.every((story) => selectedStoryIds.includes(story.id));
+                return (
+                  <details key={month} open className="rounded-xl border border-[#282E40] bg-[#10131B]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:hidden">
+                      <span className="flex items-center gap-2 text-sm font-semibold capitalize text-[#F8FAFC]"><span className="text-[#C5A46D]">▾</span>{monthLabel}<span className="text-xs font-normal text-[#64748B]">{groupStories.length} story{groupStories.length === 1 ? "" : "s"}</span></span>
+                      {groupSelectable.length > 0 && <Button type="button" size="sm" variant="ghost" onClick={(event) => { event.preventDefault(); toggleGroupSelection(groupStories); }} className="h-7 px-2 text-xs text-[#E9D2A8]">{groupSelected ? "Desmarcar mês" : "Selecionar mês"}</Button>}
+                    </summary>
+                    <div className="space-y-3 border-t border-[#282E40] p-3">{groupStories.map(renderHistoryRow)}</div>
+                  </details>
+                );
+              })}
+              {historyView === "list" && filteredHistoryStories.map((story) => (
                 <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-4 rounded-xl border border-[#282E40] bg-[#10131B] p-5 sm:flex-row sm:items-center">
                   <input type="checkbox" checked={selectedStoryIds.includes(story.id)} onChange={(event) => setSelectedStoryIds((current) => event.target.checked ? [...new Set([...current, story.id])] : current.filter((id) => id !== story.id))} aria-label={`Selecionar Story de ${format(parseISO(story.schedule_at), "dd/MM HH:mm")}`} className="h-4 w-4 shrink-0 accent-[#C5A46D]" />
                   <button type="button" onClick={() => setPreviewStory(story)} className="relative h-24 w-14 shrink-0 overflow-hidden rounded-lg bg-[#202534]" aria-label="Abrir pré-visualização do story">
@@ -710,6 +894,9 @@ export default function Stories() {
                         <RotateCcw className="h-3.5 w-3.5" />
                       </Button>
                     )}
+                    <Button size="sm" variant="outline" onClick={() => openDeleteEditor(story)} className="border-[#282E40] text-[#CBD5E1] hover:bg-[#202534]" aria-label="Editar exclusão" title={story.delete_at ? "Editar horário de exclusão" : "Definir horário de exclusão"}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
                     {["draft", "scheduled"].includes(story.status) && (
                       <Button size="sm" variant="outline" data-testid={`story-cancel-${story.id}`} onClick={() => { if (window.confirm("Cancelar este agendamento?")) storyAction.mutate({ id: story.id, action: "cancel" }); }} disabled={storyAction.isPending} className="border-[#6B5360] text-[#FBBF24] hover:bg-[#2A2024]" aria-label="Cancelar agendamento" title="Cancelar agendamento">
                         <XCircle className="mr-1.5 h-3.5 w-3.5" />
@@ -745,6 +932,26 @@ export default function Stories() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteEditStory} onOpenChange={(open) => { if (!open) { setDeleteEditStory(null); setDeleteEditAt(""); } }}>
+        <DialogContent className="border-[#2E364D] bg-[#1E2330]" data-testid="story-delete-editor-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-[#F8FAFC]">Editar exclusão automática</DialogTitle>
+            <DialogDescription className="text-[#94A3B8]">
+              {deleteEditStory?.caption || "Sem legenda"}. Deixe vazio para remover a exclusão programada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="story-delete-editor-at" className="text-[#94A3B8]">Excluir em</Label>
+            <Input id="story-delete-editor-at" type="datetime-local" value={deleteEditAt} onChange={(event) => setDeleteEditAt(event.target.value)} className="border-[#282E40] bg-[#181C26] text-[#F8FAFC]" />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => { setDeleteEditStory(null); setDeleteEditAt(""); }}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => deleteScheduleMutation.mutate({ id: deleteEditStory!.id, deleteAt: null })} disabled={deleteScheduleMutation.isPending || !deleteEditStory?.delete_at} className="border-[#6B5360] text-[#F87171]">Remover exclusão</Button>
+            <Button type="button" onClick={() => deleteScheduleMutation.mutate({ id: deleteEditStory!.id, deleteAt: deleteEditAt ? new Date(deleteEditAt).toISOString() : null })} disabled={deleteScheduleMutation.isPending || !deleteEditStory || !deleteEditAt} className="bg-[#C5A46D] font-semibold text-[#10131B] hover:bg-[#D8B77E]">Salvar horário</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
