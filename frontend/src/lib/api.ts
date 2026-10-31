@@ -262,18 +262,21 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
     if (!scheduleAt || Number.isNaN(Date.parse(scheduleAt))) throw new ApiError(400, "Escolha uma data e horário válidos.");
     const conn = await result<Row | null>(db().from("connections").select("state,source,enabled_features").eq("company_id", companyId).maybeSingle());
     const execution = conn && ["connected", "partially_connected"].includes(conn.state) && conn.enabled_features?.includes("publish") ? conn.source : "pending";
-    let deleteAt: string | null = null;
-    if (payload.delete_at) {
-      if (Number.isNaN(Date.parse(String(payload.delete_at)))) throw new ApiError(400, "Escolha uma data de exclusão válida.");
-      deleteAt = new Date(String(payload.delete_at)).toISOString();
-      if (Date.parse(deleteAt) <= Date.parse(scheduleAt)) throw new ApiError(400, "A exclusão deve ocorrer depois da publicação.");
-    }
     const cropScale = Math.min(3, Math.max(1, Number(payload.crop_scale || 1)));
+    const repeatOccurrences = Array.isArray(payload.repeat_occurrences) ? payload.repeat_occurrences : [];
     const repeatDates = Array.isArray(payload.repeat_dates) ? payload.repeat_dates.filter((value: unknown): value is string => typeof value === "string") : [];
-    const schedules = repeatDates.length > 0 && !payload.as_draft ? [...new Set(repeatDates)] : [new Date(scheduleAt).toISOString()];
-    if (schedules.length > 366) throw new ApiError(400, "O período pode gerar no máximo 366 ocorrências.");
-    for (const value of schedules) if (Number.isNaN(Date.parse(value))) throw new ApiError(400, "Há uma data inválida na repetição.");
-    const rows = schedules.map((scheduledAt) => ({ company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(scheduledAt).toISOString(), crop_scale: cropScale, delete_at: schedules.length === 1 ? deleteAt : null, delete_status: schedules.length === 1 && deleteAt ? "scheduled" : "not_scheduled", status: payload.as_draft ? "draft" : "scheduled", execution }));
+    const occurrences = repeatOccurrences.length > 0 && !payload.as_draft
+      ? repeatOccurrences.map((item: any) => ({ publishAt: String(item.publish_at || ""), deleteAt: item.delete_at ? String(item.delete_at) : null }))
+      : (repeatDates.length > 0 && !payload.as_draft ? repeatDates.map((value) => ({ publishAt: value, deleteAt: null })) : [{ publishAt: new Date(scheduleAt).toISOString(), deleteAt: null }]);
+    if (occurrences.length > 1000) throw new ApiError(400, "O agendamento pode gerar no máximo 1.000 ocorrências.");
+    for (const occurrence of occurrences) {
+      if (Number.isNaN(Date.parse(occurrence.publishAt))) throw new ApiError(400, "Há uma data inválida na repetição.");
+      if (occurrence.deleteAt) {
+        if (Number.isNaN(Date.parse(occurrence.deleteAt))) throw new ApiError(400, "Há uma data de exclusão inválida.");
+        if (Date.parse(occurrence.deleteAt) <= Date.parse(occurrence.publishAt)) throw new ApiError(400, "A exclusão deve ocorrer depois da publicação.");
+      }
+    }
+    const rows = occurrences.map(({ publishAt, deleteAt }) => ({ company_id: companyId, media_url: media.url, media_storage_path: media.storage_path ?? null, media_type: media.media_type, caption: String(payload.caption ?? "").trim(), schedule_at: new Date(publishAt).toISOString(), crop_scale: cropScale, delete_at: deleteAt ? new Date(deleteAt).toISOString() : null, delete_status: deleteAt ? "scheduled" : "not_scheduled", status: payload.as_draft ? "draft" : "scheduled", execution }));
     if (rows.length === 1) return await insertRow("stories", rows[0]) as T;
     return await result<Row[]>(db().from("stories").insert(rows).select("*")) as T;
   }
@@ -306,7 +309,8 @@ async function request<T>(method: string, path: string, body?: Body | null): Pro
     }
     if (method === "PATCH") {
       const current = await result<Row>(db().from("stories").select("*").eq("id", storyId).eq("company_id", companyId).single());
-      if (["published", "canceled"].includes(current.status)) throw new ApiError(409, "Não é possível editar um story publicado ou cancelado.");
+      const onlyEditingDeletion = payload.delete_at !== undefined && Object.keys(payload).every((key) => key === "delete_at");
+      if (["published", "canceled"].includes(current.status) && !onlyEditingDeletion) throw new ApiError(409, "Não é possível editar um story publicado ou cancelado.");
       const updates: Body = {};
       if (payload.caption !== undefined) updates.caption = String(payload.caption).trim();
       if (payload.schedule_at !== undefined) {
@@ -553,3 +557,4 @@ export const apiPostForm = async <T>(path: string, form: FormData): Promise<T> =
   if (signedError) fail(signedError);
   return await insertRow("media", { company_id: companyId, media_type: file.type.startsWith("video/") ? "video" : "image", url: `storage://media/${objectPath}`, storage_path: objectPath, name: sourceFile.name }).then((row: any) => ({ ...row, url: signed.signedUrl })) as T;
 };
+
