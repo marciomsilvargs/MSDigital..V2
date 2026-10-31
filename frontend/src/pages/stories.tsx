@@ -591,19 +591,21 @@ export default function Stories() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="story-when" className="text-[#94A3B8]">Primeira publicação</Label>
+              <Label htmlFor="story-when" className="text-[#94A3B8]">Data inicial</Label>
               <Input
                 id="story-when"
-                type="datetime-local"
-                value={scheduleAt}
+                type="date"
+                value={scheduleAt.slice(0, 10)}
                 onChange={(e) => {
-                  setScheduleAt(e.target.value);
-                  if (e.target.value) setSlots((current) => current.map((slot, index) => index === 0 ? { ...slot, publishTime: e.target.value.slice(11, 16) } : slot));
-                  if (repeatEnabled && repeatDays.length === 0 && e.target.value) setRepeatDays([new Date(e.target.value).getDay()]);
+                  const firstTime = slots[0]?.publishTime || scheduleAt.slice(11, 16) || "08:00";
+                  const nextSchedule = e.target.value ? `${e.target.value}T${firstTime}` : "";
+                  setScheduleAt(nextSchedule);
+                  if (repeatEnabled && repeatDays.length === 0 && e.target.value) setRepeatDays([new Date(`${e.target.value}T12:00:00`).getDay()]);
                 }}
                 data-testid="story-datetime-input"
                 className="border-[#282E40] bg-[#10131B] text-[#F8FAFC]"
               />
+              <p className="text-xs text-[#64748B]">Escolha apenas a data. O horário da publicação é definido em “Publicar 1”.</p>
             </div>
             <div className="space-y-2 rounded-lg border border-[#282E40] bg-[#10131B] p-3">
               <div className="flex items-center justify-between">
