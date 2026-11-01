@@ -28,6 +28,7 @@ async function result<T>(query: PromiseLike<{ data: T; error: any }>): Promise<T
 }
 const now = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
+const MAX_STORY_UPLOAD_BYTES = 100 * 1024 * 1024;
 
 async function company(companyId: string): Promise<Row> {
   const row = await result<Row | null>(db().from("companies").select("*").eq("id", companyId).maybeSingle());
@@ -548,7 +549,7 @@ export const apiPostForm = async <T>(path: string, form: FormData): Promise<T> =
   const sourceFile = form.get("file");
   if (!(sourceFile instanceof File)) throw new ApiError(400, "Selecione um arquivo de mídia.");
   const file = await prepareStoryImage(sourceFile);
-  if (file.size > 3_000_000) throw new ApiError(413, "Arquivo maior que 3 MB mesmo após o ajuste para Story.");
+  if (file.size > MAX_STORY_UPLOAD_BYTES) throw new ApiError(413, "Arquivo maior que 100 MB. Reduza o vídeo antes de enviar.");
   const client = db();
   const objectPath = `${companyId}/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
   const { error: uploadError } = await client.storage.from("media").upload(objectPath, file, { contentType: file.type, upsert: false });
