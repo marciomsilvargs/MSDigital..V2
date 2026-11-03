@@ -112,6 +112,7 @@ export default function Stories() {
   const [historyFilter, setHistoryFilter] = useState<"all" | "scheduled" | "published" | "canceled" | "failed">("all");
   const [historySearch, setHistorySearch] = useState("");
   const [historyView, setHistoryView] = useState<"grouped" | "list">("grouped");
+  const [historyVisibleLimit, setHistoryVisibleLimit] = useState(100);
   const [deleteEditStory, setDeleteEditStory] = useState<Story | null>(null);
   const [deleteEditAt, setDeleteEditAt] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -357,13 +358,17 @@ export default function Stories() {
       const query = historySearch.trim().toLowerCase();
       return !query || (story.caption || "").toLowerCase().includes(query) || format(parseISO(story.schedule_at), "dd/MM/yyyy HH:mm").includes(query);
     });
-  const historyGroups = filteredHistoryStories.reduce<Record<string, Story[]>>((groups, story) => {
+  // Render a bounded first page. Large repeat schedules can contain hundreds of
+  // rows; keeping the rest out of the DOM prevents the history screen from
+  // freezing while preserving bulk actions and month grouping for visible rows.
+  const visibleHistoryStories = filteredHistoryStories.slice(0, historyVisibleLimit);
+  const historyGroups = visibleHistoryStories.reduce<Record<string, Story[]>>((groups, story) => {
     const key = format(parseISO(story.schedule_at), "yyyy-MM");
     (groups[key] ??= []).push(story);
     return groups;
   }, {});
   const historyGroupEntries = Object.entries(historyGroups).sort(([a], [b]) => b.localeCompare(a));
-  const selectableHistoryStories = filteredHistoryStories.filter((story) => ["draft", "scheduled"].includes(story.status));
+  const selectableHistoryStories = visibleHistoryStories.filter((story) => ["draft", "scheduled"].includes(story.status));
   const allSelectableSelected = selectableHistoryStories.length > 0 && selectableHistoryStories.every((story) => selectedStoryIds.includes(story.id));
   const selectedStories = stories.filter((story) => selectedStoryIds.includes(story.id));
   const selectedCancelable = selectedStories.filter((story) => ["draft", "scheduled"].includes(story.status));
@@ -834,7 +839,7 @@ export default function Stories() {
                 const groupSelectable = groupStories.filter((story) => ["draft", "scheduled"].includes(story.status));
                 const groupSelected = groupSelectable.length > 0 && groupSelectable.every((story) => selectedStoryIds.includes(story.id));
                 return (
-                  <details key={month} open className="rounded-xl border border-[#282E40] bg-[#10131B]">
+                  <details key={month} open={historyGroupEntries[0]?.[0] === month} className="rounded-xl border border-[#282E40] bg-[#10131B]">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 marker:hidden">
                       <span className="flex items-center gap-2 text-sm font-semibold capitalize text-[#F8FAFC]"><span className="text-[#C5A46D]">▾</span>{monthLabel}<span className="text-xs font-normal text-[#64748B]">{groupStories.length} story{groupStories.length === 1 ? "" : "s"}</span></span>
                       {groupSelectable.length > 0 && <Button type="button" size="sm" variant="ghost" onClick={(event) => { event.preventDefault(); toggleGroupSelection(groupStories); }} className="h-7 px-2 text-xs text-[#E9D2A8]">{groupSelected ? "Desmarcar mês" : "Selecionar mês"}</Button>}
@@ -843,7 +848,7 @@ export default function Stories() {
                   </details>
                 );
               })}
-              {historyView === "list" && filteredHistoryStories.map((story) => (
+              {historyView === "list" && visibleHistoryStories.map((story) => (
                 <div key={story.id} data-testid={`story-row-${story.id}`} className="flex flex-col gap-4 rounded-xl border border-[#282E40] bg-[#10131B] p-5 sm:flex-row sm:items-center">
                   <input type="checkbox" checked={selectedStoryIds.includes(story.id)} onChange={(event) => setSelectedStoryIds((current) => event.target.checked ? [...new Set([...current, story.id])] : current.filter((id) => id !== story.id))} aria-label={`Selecionar Story de ${format(parseISO(story.schedule_at), "dd/MM HH:mm")}`} className="h-4 w-4 shrink-0 accent-[#C5A46D]" />
                   <button type="button" onClick={() => setPreviewStory(story)} className="relative h-24 w-14 shrink-0 overflow-hidden rounded-lg bg-[#202534]" aria-label="Abrir pré-visualização do story">
@@ -911,6 +916,11 @@ export default function Stories() {
                   </div>
                 </div>
               ))}
+              {filteredHistoryStories.length > visibleHistoryStories.length && (
+                <Button type="button" variant="outline" onClick={() => setHistoryVisibleLimit((limit) => limit + 100)} className="w-full border-[#282E40] text-[#E9D2A8]">
+                  Carregar mais ({filteredHistoryStories.length - visibleHistoryStories.length} restantes)
+                </Button>
+              )}
               {filteredHistoryStories.length === 0 && <p className="py-8 text-center text-sm text-[#94A3B8]">Nenhum Story encontrado com esses filtros.</p>}
             </div>
           </TabsContent>
