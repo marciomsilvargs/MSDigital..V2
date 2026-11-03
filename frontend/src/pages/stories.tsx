@@ -111,6 +111,7 @@ export default function Stories() {
   const [selectedStoryIds, setSelectedStoryIds] = useState<string[]>([]);
   const [historyFilter, setHistoryFilter] = useState<"all" | "scheduled" | "published" | "canceled" | "failed">("all");
   const [historySearch, setHistorySearch] = useState("");
+  const [historyTimeFilter, setHistoryTimeFilter] = useState("all");
   const [historyView, setHistoryView] = useState<"grouped" | "list">("grouped");
   const [historyVisibleLimit, setHistoryVisibleLimit] = useState(100);
   const [deleteEditStory, setDeleteEditStory] = useState<Story | null>(null);
@@ -354,10 +355,12 @@ export default function Stories() {
   const filteredHistoryStories = [...stories]
     .reverse()
     .filter((story) => historyFilter === "all" || story.status === historyFilter)
+    .filter((story) => historyTimeFilter === "all" || format(parseISO(story.schedule_at), "HH:mm") === historyTimeFilter)
     .filter((story) => {
       const query = historySearch.trim().toLowerCase();
       return !query || (story.caption || "").toLowerCase().includes(query) || format(parseISO(story.schedule_at), "dd/MM/yyyy HH:mm").includes(query);
     });
+  const historyTimeOptions = [...new Set(stories.map((story) => format(parseISO(story.schedule_at), "HH:mm")))].sort();
   // Render a bounded first page. Large repeat schedules can contain hundreds of
   // rows; keeping the rest out of the DOM prevents the history screen from
   // freezing while preserving bulk actions and month grouping for visible rows.
@@ -807,6 +810,10 @@ export default function Stories() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Input value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Buscar legenda ou data" aria-label="Buscar agendamentos" className="h-8 w-44 border-[#282E40] bg-[#181C26] text-xs text-[#F8FAFC]" />
+                  <select value={historyTimeFilter} onChange={(event) => setHistoryTimeFilter(event.target.value)} aria-label="Filtrar por horário" className="h-8 rounded-md border border-[#282E40] bg-[#181C26] px-2 text-xs text-[#F8FAFC]">
+                    <option value="all">Todos os horários</option>
+                    {historyTimeOptions.map((time) => <option key={time} value={time}>{time}</option>)}
+                  </select>
                   {(["all", "scheduled", "published", "canceled", "failed"] as const).map((filter) => (
                     <Button key={filter} type="button" size="sm" variant={historyFilter === filter ? "secondary" : "ghost"} onClick={() => setHistoryFilter(filter)} className="h-8 px-2 text-xs">
                       {{ all: "Todos", scheduled: "Agendados", published: "Publicados", canceled: "Cancelados", failed: "Falhos" }[filter]}
