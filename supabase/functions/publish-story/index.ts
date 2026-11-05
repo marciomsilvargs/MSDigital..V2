@@ -27,20 +27,21 @@ Deno.serve(async (req) => {
       mediaUrl = data.signedUrl;
     }
     if (!mediaUrl.startsWith("https://")) return json({ detail: "A mídia precisa estar hospedada em HTTPS para ser publicada no Instagram." }, 400);
-    const { data: locked, error: lockError } = await admin.from("stories").update({ status: "publishing", execution: "real", last_error: null })
+    const { data: locked, error: lockError } = await admin.from("stories").update({ status: "publishing", processing_started_at: new Date().toISOString(), execution: "real", last_error: null })
       .eq("id", storyId).eq("company_id", companyId).not("status", "in", "(published,publishing)").select("id").maybeSingle();
     if (lockError) throw lockError;
     if (!locked) return json({ detail: "Este story já foi enviado ou está em processamento." }, 409);
     try {
       const platformId = await createAndPublishStory(conn.ig_user_id, conn.token, mediaUrl, story.media_type === "video", conn.login_flow);
       const { data: updated, error: updateError } = await admin.from("stories").update({
-        status: "published", execution: "real", platform_id: platformId, published_at: new Date().toISOString(), last_error: null,
+        status: "published", execution: "real", platform_id: platformId, published_at: new Date().toISOString(), processing_started_at: null, last_error: null,
       }).eq("id", storyId).eq("company_id", companyId).select("*").single();
       if (updateError) throw updateError;
       return json(updated);
     } catch (error) {
-      await admin.from("stories").update({ status: "failed", execution: "real", attempts: Number(story.attempts || 0) + 1, last_error: error instanceof Error ? error.message : "Falha ao publicar." }).eq("id", storyId).eq("company_id", companyId);
+      await admin.from("stories").update({ status: "failed", processing_started_at: null, execution: "real", attempts: Number(story.attempts || 0) + 1, last_error: error instanceof Error ? error.message : "Falha ao publicar." }).eq("id", storyId).eq("company_id", companyId);
       throw error;
     }
   } catch (error) { return handleError(error); }
 });
+
