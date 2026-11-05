@@ -18,11 +18,18 @@ Deno.serve(async (req) => {
   if (req.method !== "POST" || !authorized(req)) return json({ detail: "Não autorizado." }, 401);
   try {
     const { admin } = clients();
-    const { data: due, error } = await admin.from("stories").select("*").eq("status", "scheduled").lte("schedule_at", new Date().toISOString()).order("schedule_at").limit(50);
+    const processingNow = new Date();
+    const staleCutoff = new Date(processingNow.getTime() - 15 * 60_000).toISOString();
+    // A network timeout or an interrupted Edge Function can leave a Story
+    // locked as "publishing" forever. Release only locks with an explicit
+    // processing timestamp older than 15 minutes so they can be retried.
+    await admin.from("stories").update({ status: "scheduled", processing_started_at: null, last_error: "Publicação retomada após tempo limite." })
+      .eq("status", "publishing").lt("processing_started_at", staleCutoff);
+    const { data: due, error } = await admin.from("stories").select("*").eq("status", "scheduled").lte("schedule_at", processingNow.toISOString()).order("schedule_at").limit(50);
     if (error) throw error;
     let processed = 0;
     for (const story of due || []) {
-      const { data: lock, error: lockError } = await admin.from("stories").update({ status: "publishing" })
+      const { data: lock, error: lockError } = await admin.from("stories").update({ status: "publishing", processing_started_at: new Date().toISOString() })
         .eq("id", story.id).eq("status", "scheduled").select("id").maybeSingle();
       if (lockError) throw lockError;
       if (!lock) continue;
@@ -41,13 +48,13 @@ Deno.serve(async (req) => {
           }
           if (!mediaUrl.startsWith("https://")) throw new Error("A mídia precisa estar hospedada em HTTPS para ser publicada no Instagram.");
           const platformId = await createAndPublishStory(conn.ig_user_id, conn.token, mediaUrl, story.media_type === "video", conn.login_flow);
-          const { error: updateError } = await admin.from("stories").update({ status: "published", execution: "real", platform_id: platformId, published_at: new Date().toISOString(), last_error: null }).eq("id", story.id);
+          const { error: updateError } = await admin.from("stories").update({ status: "published", execution: "real", platform_id: platformId, published_at: new Date().toISOString(), processing_started_at: null, last_error: null }).eq("id", story.id);
           if (updateError) throw updateError;
         }
       } catch (error) {
         const attempts = Number(story.attempts || 0) + 1;
         const { error: updateError } = await admin.from("stories").update({
-          status: attempts >= 3 ? "failed" : "scheduled", attempts,
+          status: attempts >= 3 ? "failed" : "scheduled", attempts, processing_started_at: null,
           last_error: error instanceof Error ? error.message.slice(0, 500) : "Falha ao publicar o Story.",
         }).eq("id", story.id);
         if (updateError) console.error(updateError);
@@ -110,4 +117,5 @@ Deno.serve(async (req) => {
     return json({ ok: true, processed, insights: (metricStories || []).length, deletions: (deleteDue || []).length });
   } catch (error) { console.error("Scheduled Story processor failed", error); return json({ detail: "Falha processando Stories agendados." }, 500); }
 });
+
 
